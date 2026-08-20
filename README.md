@@ -114,6 +114,9 @@ hatch - is recorded in the run's event log.
 - `unlock CONFIRM` / `unhard CONFIRM` - leave Locked mode / Hardmode (logged)
 - `minimap` - toggle the minimap button
 - `reset` - wipe this profile (confirm dialog)
+- `dev` - lists the dev/test commands (`grant`, `grantpacks`, `grantshards`,
+  `testboss`, `testgod`). Command-only, and every grant is permanently
+  recorded in the run's event log - test freely, but the receipts show.
 
 ## Rebuilding the card pool (developers)
 
