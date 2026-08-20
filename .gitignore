@@ -1,0 +1,10 @@
+# Local dev convenience (machine-specific game paths)
+deploy_tavernleaguetcg.bat
+
+# Pool-builder working files (regenerate: node tools/fetch_dataset.js)
+tools/cache/
+tools/report_included.csv
+tools/report_excluded.csv
+
+# Release build output
+release/

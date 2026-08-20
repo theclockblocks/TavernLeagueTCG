@@ -1,0 +1,8 @@
+# Tavern League TCG pool overrides. Applied last by build_cardpool.js.
+# Format: itemId,action[,tier]
+#   exclude        - drop the item from the pool
+#   tier,N         - force rarity tier N (1 common .. 5 legendary)
+#   promote,N      - alias of tier
+#   demote,N       - alias of tier
+# Example: promote iconic boss drops to tier 5
+# 17182,tier,5    # Sulfuras, Hand of Ragnaros (already legendary quality)
