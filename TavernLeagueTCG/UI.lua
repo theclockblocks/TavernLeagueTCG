@@ -237,11 +237,6 @@ end
 -- Pack opening overlay: selection -> rip -> reveal
 ---------------------------------------------------------------------------
 
-local SEAL_ICONS = {
-  "Interface\\Icons\\INV_Misc_Gem_Ruby_02",
-  "Interface\\Icons\\INV_Misc_Gem_Sapphire_02",
-  "Interface\\Icons\\INV_Misc_Gem_Emerald_02",
-}
 local PACK_TINTS = {
   { 0.55, 0.15, 0.15 },
   { 0.15, 0.25, 0.55 },
@@ -264,21 +259,6 @@ local function CreateSealedPack(parent, index)
   p.art:SetTexture(TT.CARD_BACK_TEX)
   local artTints = { { 1, 0.87, 0.87 }, { 0.87, 0.92, 1 }, { 0.87, 1, 0.9 } }
   p.art:SetVertexColor(unpack(artTints[index]))
-
-  p.seal = p:CreateTexture(nil, "OVERLAY")
-  p.seal:SetSize(26, 26)
-  p.seal:SetPoint("BOTTOMRIGHT", -8, 8)
-  p.seal:SetTexture(SEAL_ICONS[index])
-  p.seal:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-
-  -- the tear-away top strip, animated on rip
-  p.strip = CreateFrame("Frame", nil, p, "BackdropTemplate")
-  p.strip:SetBackdrop(BOX_BACKDROP)
-  p.strip:SetBackdropColor(0.9, 0.78, 0.35, 1)
-  p.strip:SetBackdropBorderColor(0.6, 0.5, 0.2)
-  p.strip:SetPoint("TOPLEFT", -2, 8)
-  p.strip:SetPoint("TOPRIGHT", 2, 8)
-  p.strip:SetHeight(18)
 
   p:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(1, 1, 1)
@@ -567,22 +547,18 @@ local function OnPackChosen(chosen)
     end
   end
 
-  -- tear the strip off the chosen pack
-  local strip = chosen.strip
-  StartTween(0.45, function(pr)
-    strip:ClearAllPoints()
-    strip:SetPoint("TOP", chosen, "TOP", 40 * pr, 8 + 70 * pr)
-    strip:SetAlpha(1 - pr)
+  -- the chosen pack flares, rises and fades open
+  chosen:SetBackdropBorderColor(1, 1, 1)
+  local point, rel, relPoint, x0, y0 = chosen:GetPoint(1)
+  StartTween(0.55, function(pr)
+    chosen:ClearAllPoints()
+    chosen:SetPoint(point, rel, relPoint, x0, y0 + 45 * pr)
+    chosen:SetAlpha(1 - pr * pr)
   end, function()
-    strip:Hide()
-    StartTween(0.25, function(pr)
-      chosen:SetAlpha(1 - pr)
-    end, function()
-      chosen:Hide()
-      chosen:SetAlpha(1)
-      ui.selectLockout = false
-      EnterRevealStage()
-    end)
+    chosen:Hide()
+    chosen:SetAlpha(1)
+    ui.selectLockout = false
+    EnterRevealStage()
   end)
 end
 
@@ -615,13 +591,8 @@ local function EnterSelectStage()
   OverlayShowStage("select")
   ui.selectLockout = false
   for i, p in ipairs(ui.packChoices) do
-    p.strip:Hide()
-    p.strip:ClearAllPoints()
-    p.strip:SetPoint("TOPLEFT", -2, 8)
-    p.strip:SetPoint("TOPRIGHT", 2, 8)
-    p.strip:SetAlpha(1)
-    p.strip:Show()
     p:SetAlpha(1)
+    p:SetBackdropBorderColor(GOLD.r, GOLD.g, GOLD.b)
     p:Enable()
     p:Show()
   end
