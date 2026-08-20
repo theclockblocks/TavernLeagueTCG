@@ -250,31 +250,24 @@ local PACK_TINTS = {
 
 local function CreateSealedPack(parent, index)
   local p = CreateFrame("Button", nil, parent, "BackdropTemplate")
-  p:SetSize(150, 210)
+  p:SetSize(140, 230)
   p:SetBackdrop(PANEL_BACKDROP)
   p:SetBackdropColor(unpack(PACK_TINTS[index]))
   p:SetBackdropBorderColor(GOLD.r, GOLD.g, GOLD.b)
   p.baseY = 0
 
+  -- the card back art fills the pack; a subtle per-pack tint keeps the
+  -- three choices visually distinct
   p.art = p:CreateTexture(nil, "ARTWORK")
-  p.art:SetSize(72, 72)
-  p.art:SetPoint("TOP", 0, -24)
-  p.art:SetTexture(TT.CARD_BACK_ICON)
-  p.art:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-
-  p.title = p:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  p.title:SetPoint("TOP", p.art, "BOTTOM", 0, -8)
-  p.title:SetText("Tavern League")
-  p.title:SetTextColor(GOLD.r, GOLD.g, GOLD.b)
-
-  p.sub = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  p.sub:SetPoint("TOP", p.title, "BOTTOM", 0, -2)
-  p.sub:SetText(TT.ECON.cardsPerPack .. " cards")
-  p.sub:SetTextColor(0.8, 0.8, 0.8)
+  p.art:SetPoint("TOPLEFT", 3, -3)
+  p.art:SetPoint("BOTTOMRIGHT", -3, 3)
+  p.art:SetTexture(TT.CARD_BACK_TEX)
+  local artTints = { { 1, 0.87, 0.87 }, { 0.87, 0.92, 1 }, { 0.87, 1, 0.9 } }
+  p.art:SetVertexColor(unpack(artTints[index]))
 
   p.seal = p:CreateTexture(nil, "OVERLAY")
-  p.seal:SetSize(30, 30)
-  p.seal:SetPoint("BOTTOM", 0, 16)
+  p.seal:SetSize(26, 26)
+  p.seal:SetPoint("BOTTOMRIGHT", -8, 8)
   p.seal:SetTexture(SEAL_ICONS[index])
   p.seal:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 
@@ -298,7 +291,7 @@ end
 
 local function CreateRevealCard(parent)
   local c = CreateFrame("Button", nil, parent, "BackdropTemplate")
-  c:SetSize(130, 170)
+  c:SetSize(110, 190)
   c:SetBackdrop(PANEL_BACKDROP)
 
   -- rotating glow BEHIND the card (foil + climax suspense)
@@ -309,18 +302,11 @@ local function CreateRevealCard(parent)
   c.glow:SetVertexColor(1, 0.85, 0.3, 0)
   c.glow:SetBlendMode("ADD")
 
-  -- face-down art
+  -- face-down: the card back art fills the card
   c.back = c:CreateTexture(nil, "ARTWORK")
-  c.back:SetSize(64, 64)
-  c.back:SetPoint("CENTER", 0, 10)
-  c.back:SetTexture(TT.CARD_BACK_ICON)
-  c.back:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-  c.back:SetDesaturated(true)
-
-  c.backLabel = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  c.backLabel:SetPoint("CENTER", 0, -40)
-  c.backLabel:SetText("?")
-  c.backLabel:SetTextColor(0.5, 0.5, 0.5)
+  c.back:SetPoint("TOPLEFT", 3, -3)
+  c.back:SetPoint("BOTTOMRIGHT", -3, 3)
+  c.back:SetTexture(TT.CARD_BACK_TEX)
 
   -- face-up art
   c.icon = c:CreateTexture(nil, "ARTWORK")
@@ -331,7 +317,7 @@ local function CreateRevealCard(parent)
 
   c.name = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   c.name:SetPoint("TOP", c.icon, "BOTTOM", 0, -8)
-  c.name:SetWidth(118)
+  c.name:SetWidth(98)
 
   c.rarity = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   c.rarity:SetPoint("BOTTOM", 0, 10)
@@ -349,7 +335,6 @@ local function SetCardFaceDown(c)
   c:SetBackdropColor(0.10, 0.09, 0.14, 1)
   c:SetBackdropBorderColor(0.35, 0.32, 0.45)
   c.back:Show()
-  c.backLabel:Show()
   c.icon:Hide()
   c.name:SetText("")
   c.rarity:SetText("")
@@ -366,7 +351,6 @@ local function SetCardFaceUp(c, cardData)
   c:SetBackdropColor(0.08, 0.08, 0.10, 1)
   c:SetBackdropBorderColor(r, g, b)
   c.back:Hide()
-  c.backLabel:Hide()
   c.icon:SetTexture(CardIcon(key))
   c.icon:Show()
 
@@ -511,7 +495,7 @@ local function BuildRevealStage(parent)
   local title = CreateHeader(stage, "Flip the cards - left to right, save the last for the big one")
   title:SetPoint("TOP", 0, -18)
 
-  local COLS, W, H, GAP = 4, 130, 170, 14
+  local COLS, W, H, GAP = 4, 110, 190, 14
   local gridW = COLS * W + (COLS - 1) * GAP
   for i = 1, TT.ECON.cardsPerPack do
     local col = (i - 1) % COLS
@@ -529,7 +513,7 @@ local function BuildRevealStage(parent)
   ui.climaxFlash:Hide()
 
   ui.summaryText = stage:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  ui.summaryText:SetPoint("BOTTOM", 0, 52)
+  ui.summaryText:SetPoint("BOTTOM", 0, 48)
   ui.summaryText:Hide()
 
   ui.doneBtn = CreateActionButton(stage, 160, 30, "Add to Binder", function()
@@ -610,7 +594,7 @@ local function BuildSelectStage(parent)
   local title = CreateHeader(stage, "Pick your pack")
   title:SetPoint("TOP", 0, -30)
 
-  local W, GAP = 150, 40
+  local W, GAP = 140, 40
   local totalW = 3 * W + 2 * GAP
   for i = 1, 3 do
     local p = CreateSealedPack(stage, i)
@@ -645,7 +629,7 @@ local function EnterSelectStage()
     if not ui.selectStage:IsVisible() then StopLoop("packbob"); return end
     for i, p in ipairs(ui.packChoices) do
       local off = 6 * math.sin(now * 1.4 + i * 2.1)
-      local W, GAP = 150, 40
+      local W, GAP = 140, 40
       local totalW = 3 * W + 2 * GAP
       p:ClearAllPoints()
       p:SetPoint("TOPLEFT", ui.selectStage, "TOP",
