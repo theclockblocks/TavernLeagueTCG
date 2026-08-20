@@ -307,12 +307,6 @@ local function CreateRevealCard(parent)
   c.name:SetPoint("TOP", c, "TOP", 0, -140)
   c.name:SetWidth(92)
 
-  c.foilTag = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.foilTag:SetPoint("TOP", 0, -8)
-  c.foilTag:SetText("FOIL")
-  c.foilTag:SetTextColor(1, 0.85, 0.3)
-  c.foilTag:Hide()
-
   return c
 end
 
@@ -323,7 +317,6 @@ local function SetCardFaceDown(c)
   c.front:Hide()
   c.icon:Hide()
   c.name:SetText("")
-  c.foilTag:Hide()
   c.glow:SetVertexColor(1, 0.85, 0.3, 0)
   c.faceUp = false
 end
@@ -344,7 +337,6 @@ local function SetCardFaceUp(c, cardData)
   c.pendingKey = name and nil or key
   c.name:SetText(name or "...")
   c.name:SetTextColor(r, g, b)
-  c.foilTag:SetShown(foil and true or false)
 
   if foil then
     local loopKey = "foil" .. tostring(c)
@@ -714,10 +706,13 @@ local function CreateBinderCell(parent)
   c.count:SetPoint("BOTTOMRIGHT", c.icon, "BOTTOMRIGHT", -3, 3)
   c.count:SetTextColor(1, 0.82, 0)
 
-  c.foil = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.foil:SetPoint("TOP", 0, -8)
-  c.foil:SetText("FOIL")
-  c.foil:SetTextColor(1, 0.85, 0.3)
+  -- foil cards get a gently pulsing golden sheen instead of a text tag
+  c.foilGlow = c:CreateTexture(nil, "ARTWORK", nil, 2)
+  c.foilGlow:SetPoint("TOPLEFT", 2, -2)
+  c.foilGlow:SetPoint("BOTTOMRIGHT", -2, 2)
+  c.foilGlow:SetColorTexture(1, 0.85, 0.3, 1)
+  c.foilGlow:SetBlendMode("ADD")
+  c.foilGlow:SetAlpha(0)
 
   c.newTag = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   c.newTag:SetPoint("TOPLEFT", c.icon, "TOPLEFT", 3, -3)
@@ -861,17 +856,42 @@ local function RefreshBinder()
         cell.name:SetTextColor(0.55, 0.55, 0.55)
       end
       cell.count:SetText(ownedCard and ("x" .. (n + f)) or "")
-      cell.foil:SetShown(f > 0)
+      cell.isFoil = (f > 0)
+      if not cell.isFoil then cell.foilGlow:SetAlpha(0) end
       local seen = p.firstSeen[key]
       cell.newTag:SetShown(ownedCard and seen ~= nil and (now - seen) < 86400)
       cell:Show()
       pageRows[#pageRows + 1] = row
     else
+      cell.isFoil = false
+      cell.foilGlow:SetAlpha(0)
       cell:Hide()
     end
   end
   -- warm the item cache for this page so hover tooltips are ready
   TT.PrefetchItems(pageRows)
+
+  -- drive the golden sheen on any visible foil cards
+  local anyFoil = false
+  for _, cell in ipairs(ui.binderCells) do
+    if cell:IsShown() and cell.isFoil then anyFoil = true end
+  end
+  if anyFoil then
+    StartLoop("binderfoil", function(now)
+      if not ui.binderPage:IsVisible() then
+        StopLoop("binderfoil")
+        return
+      end
+      local a = 0.10 + 0.07 * math.sin(now * 2.5)
+      for _, cell in ipairs(ui.binderCells) do
+        if cell:IsShown() and cell.isFoil then
+          cell.foilGlow:SetAlpha(a)
+        end
+      end
+    end)
+  else
+    StopLoop("binderfoil")
+  end
 end
 
 local function BuildBinderPage(page)

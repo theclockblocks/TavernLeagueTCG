@@ -567,11 +567,13 @@ local function createSlot(parent, onClick)
   b.icon:SetPoint("TOPLEFT", 3, -3)
   b.icon:SetPoint("BOTTOMRIGHT", -3, 3)
   b.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-  b.foil = b:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  b.foil:SetPoint("TOPRIGHT", -2, -2)
-  b.foil:SetText("F")
-  b.foil:SetTextColor(1, 0.85, 0.3)
-  b.foil:Hide()
+  -- foil copies shimmer gold instead of carrying a text tag
+  b.foilGlow = b:CreateTexture(nil, "ARTWORK", nil, 2)
+  b.foilGlow:SetPoint("TOPLEFT", 3, -3)
+  b.foilGlow:SetPoint("BOTTOMRIGHT", -3, 3)
+  b.foilGlow:SetColorTexture(1, 0.85, 0.3, 1)
+  b.foilGlow:SetBlendMode("ADD")
+  b.foilGlow:SetAlpha(0)
   if onClick then b:SetScript("OnClick", onClick) end
   b:SetScript("OnEnter", function(self)
     if not self.cardKey then return end
@@ -597,12 +599,12 @@ local function fillSlot(slot, entry)
     slot.icon:Show()
     local r, g, b = TT.RarityColor(row and row.r or 1)
     slot:SetBackdropBorderColor(r, g, b)
-    slot.foil:SetShown(entry.f and true or false)
+    slot.foilGlow:SetAlpha(entry.f and 0.3 or 0)
   else
     slot.cardKey = nil
     slot.icon:Hide()
     slot:SetBackdropBorderColor(0.35, 0.35, 0.35)
-    slot.foil:Hide()
+    slot.foilGlow:SetAlpha(0)
   end
 end
 
