@@ -645,7 +645,7 @@ end
 -- Binder page
 ---------------------------------------------------------------------------
 
-local BINDER_COLS, BINDER_ROWS = 4, 3
+local BINDER_COLS, BINDER_ROWS = 6, 2
 local BINDER_PAGE_SIZE = BINDER_COLS * BINDER_ROWS
 
 local OWN_FILTERS = {
@@ -688,35 +688,39 @@ local function BuildBinderList()
 end
 
 local function CreateBinderCell(parent)
+  -- a miniature card face: front-frame art, item icon in the art's gold
+  -- window, name in the band below (window fractions: x 15.5%, y 26-71%)
   local c = CreateFrame("Button", nil, parent, "BackdropTemplate")
-  c:SetSize(180, 128)
+  c:SetSize(116, 200)
   c:SetBackdrop(BOX_BACKDROP)
-  c:SetBackdropColor(0.09, 0.09, 0.12, 0.95)
+  c:SetBackdropColor(0.05, 0.05, 0.08, 1)
 
-  c.icon = c:CreateTexture(nil, "ARTWORK")
-  c.icon:SetSize(44, 44)
-  c.icon:SetPoint("TOPLEFT", 10, -10)
+  c.front = c:CreateTexture(nil, "ARTWORK")
+  c.front:SetPoint("TOPLEFT", 2, -2)
+  c.front:SetPoint("BOTTOMRIGHT", -2, 2)
+  c.front:SetTexture(TT.CARD_FRONT_TEX)
+
+  c.icon = c:CreateTexture(nil, "ARTWORK", nil, 1)
+  c.icon:SetPoint("TOPLEFT", 18, -53)
+  c.icon:SetPoint("BOTTOMRIGHT", -18, 58)
   c.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 
   c.name = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.name:SetPoint("TOPLEFT", c.icon, "TOPRIGHT", 8, -2)
-  c.name:SetPoint("RIGHT", -8, 0)
-  c.name:SetJustifyH("LEFT")
+  c.name:SetPoint("TOP", c, "TOP", 0, -146)
+  c.name:SetWidth(94)
   if c.name.SetMaxLines then c.name:SetMaxLines(2) end
 
-  c.rarity = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  c.rarity:SetPoint("BOTTOMLEFT", 10, 10)
-
   c.count = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.count:SetPoint("BOTTOMRIGHT", -10, 10)
+  c.count:SetPoint("BOTTOMRIGHT", c.icon, "BOTTOMRIGHT", -3, 3)
+  c.count:SetTextColor(1, 0.82, 0)
 
   c.foil = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.foil:SetPoint("TOPRIGHT", -8, -8)
+  c.foil:SetPoint("TOP", 0, -8)
   c.foil:SetText("FOIL")
   c.foil:SetTextColor(1, 0.85, 0.3)
 
   c.newTag = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.newTag:SetPoint("BOTTOM", 0, 10)
+  c.newTag:SetPoint("TOPLEFT", c.icon, "TOPLEFT", 3, -3)
   c.newTag:SetText("NEW")
   c.newTag:SetTextColor(0.3, 1, 0.3)
 
@@ -843,7 +847,10 @@ local function RefreshBinder()
       cell.cardKey = key
       cell.icon:SetTexture(CardIcon(key))
       cell.icon:SetDesaturated(not ownedCard)
-      cell.icon:SetAlpha(ownedCard and 1 or 0.45)
+      cell.icon:SetAlpha(ownedCard and 1 or 0.4)
+      -- missing cards render as ghost cards: whole face desaturated
+      cell.front:SetDesaturated(not ownedCard)
+      cell.front:SetAlpha(ownedCard and 1 or 0.5)
       cell:SetBackdropBorderColor(r, g, bl, ownedCard and 1 or 0.35)
 
       local name = CardName(row.i and key)
@@ -851,10 +858,8 @@ local function RefreshBinder()
       if ownedCard then
         cell.name:SetTextColor(r, g, bl)
       else
-        cell.name:SetTextColor(0.5, 0.5, 0.5)
+        cell.name:SetTextColor(0.55, 0.55, 0.55)
       end
-      cell.rarity:SetText(TT.RarityLabel(row.r))
-      cell.rarity:SetTextColor(r, g, bl, ownedCard and 1 or 0.5)
       cell.count:SetText(ownedCard and ("x" .. (n + f)) or "")
       cell.foil:SetShown(f > 0)
       local seen = p.firstSeen[key]
@@ -941,7 +946,7 @@ local function BuildBinderPage(page)
     local col = (i - 1) % BINDER_COLS
     local row = math.floor((i - 1) / BINDER_COLS)
     local cell = CreateBinderCell(panel)
-    cell:SetPoint("TOPLEFT", 12 + col * (180 + GAP), -62 - row * (128 + GAP))
+    cell:SetPoint("TOPLEFT", 14 + col * (116 + GAP), -62 - row * (200 + GAP))
     ui.binderCells[i] = cell
   end
 end
