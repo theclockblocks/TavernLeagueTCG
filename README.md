@@ -118,21 +118,12 @@ hatch - is recorded in the run's event log.
   `testboss`, `testgod`). Command-only, and every grant is permanently
   recorded in the run's event log - test freely, but the receipts show.
 
-## Rebuilding the card pool (developers)
+## Contributing
 
-The pool (`TavernLeagueTCG/CardPool.lua`) is generated from the community
-[wow-classic-items](https://github.com/nexus-devs/wow-classic-items)
-dataset - pinned npm versions 0.8.2 (Classic era build) and 1.0.0 (TBC
-Classic build), so Era/TBC tagging and item quality are expansion-accurate:
-
-```
-node tools/fetch_dataset.js
-node tools/build_cardpool.js
-```
-
-Weapons, Armor and Trade Goods become cards; rarity = item quality.
-Hand-tune with `tools/overrides.csv` (exclude/re-tier specific items) and
-eyeball `tools/report_included.csv` / `report_excluded.csv`.
+Want to fix card data, improve the art, or hack on the addon? Everything
+is a one-command pipeline - adding/removing/re-tiering cards is two CSV
+files, card art rebuilds from any PNG you drop in `Art/`, and the card
+layout is a documented config table. See **[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ## License
 

@@ -1,0 +1,17 @@
+@echo off
+rem Copy this file to deploy_tavernleaguetcg.bat (gitignored) and fix the
+rem game paths for your machine. Run after editing, then /reload in game.
+robocopy "%~dp0TavernLeagueTCG" "C:\Program Files (x86)\World of Warcraft\_classic_era_\Interface\AddOns\TavernLeagueTCG" /MIR /NJH /NJS /NDL
+if %ERRORLEVEL% LSS 8 (
+  echo Deployed to Classic Era.
+) else (
+  echo Classic Era copy FAILED - is the game path correct?
+)
+robocopy "%~dp0TavernLeagueTCG" "C:\Program Files (x86)\World of Warcraft\_anniversary_\Interface\AddOns\TavernLeagueTCG" /MIR /NJH /NJS /NDL
+if %ERRORLEVEL% LSS 8 (
+  echo Deployed to TBC Anniversary.
+) else (
+  echo TBC Anniversary copy FAILED - is the game path correct?
+)
+echo Type /reload in game to pick up changes.
+pause

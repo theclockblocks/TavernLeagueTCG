@@ -197,3 +197,39 @@ TT.QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
 TT.CARD_BACK_ICON = "Interface\\Icons\\INV_Misc_Ticket_Tarot_Stack_01"  -- minimap/tab icon
 TT.CARD_BACK_TEX = "Interface\\AddOns\\TavernLeagueTCG\\art\\cardback"    -- the card back art
 TT.CARD_FRONT_TEX = "Interface\\AddOns\\TavernLeagueTCG\\art\\cardfront"  -- face-up card frame
+
+---------------------------------------------------------------------------
+-- Card face layout. Everything here is a FRACTION of the card art's area,
+-- so changing the art only means re-measuring these - no UI code edits.
+-- Regenerate art textures with: node tools/build_art.js (see CONTRIBUTING).
+---------------------------------------------------------------------------
+
+TT.LAYOUT = {
+  -- the art's icon window (where the item icon renders), measured from the
+  -- current cardfront art: fractions of width/height from each edge
+  window = { left = 0.155, right = 0.155, top = 0.263, bottom = 0.289 },
+  -- top of the name band, as a fraction of card height from the top
+  nameTop = 0.735,
+  -- foil effects
+  foilPulseSpeed = 2.5,     -- radians/sec for the sheen/aura breathing
+  sheenBase = 0.20, sheenSwing = 0.14,   -- face sheen alpha = base + swing*sin
+  auraBase = 0.55, auraSwing = 0.30,     -- aura alpha
+  auraScale = 1.4,          -- aura size relative to the card
+  -- pack selection screen tints (three packs: warm / cool / green)
+  packArtTints = { { 1, 0.87, 0.87 }, { 0.87, 0.92, 1 }, { 0.87, 1, 0.9 } },
+}
+
+-- Computes pixel positions for a card face of a given size: where the item
+-- icon window sits and where the name band starts. `inset` is the art's
+-- inset from the frame edge.
+function TT.CardFaceMetrics(w, h, inset)
+  local aw, ah = w - 2 * inset, h - 2 * inset
+  local win = TT.LAYOUT.window
+  return {
+    iconLeft   = inset + aw * win.left,
+    iconRight  = inset + aw * win.right,
+    iconTop    = inset + ah * win.top,
+    iconBottom = inset + ah * win.bottom,
+    nameTop    = h * TT.LAYOUT.nameTop,
+  }
+end

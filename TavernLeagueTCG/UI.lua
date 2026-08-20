@@ -257,8 +257,7 @@ local function CreateSealedPack(parent, index)
   p.art:SetPoint("TOPLEFT", 3, -3)
   p.art:SetPoint("BOTTOMRIGHT", -3, 3)
   p.art:SetTexture(TT.CARD_BACK_TEX)
-  local artTints = { { 1, 0.87, 0.87 }, { 0.87, 0.92, 1 }, { 0.87, 1, 0.9 } }
-  p.art:SetVertexColor(unpack(artTints[index]))
+  p.art:SetVertexColor(unpack(TT.LAYOUT.packArtTints[index]))
 
   p:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(1, 1, 1)
@@ -289,8 +288,9 @@ local function CreateRevealCard(parent)
   c.back:SetTexture(TT.CARD_BACK_TEX)
 
   -- face-up: the card front frame, with the item icon inside the frame's
-  -- gold window and the name in the open band beneath it (window position
-  -- measured from the art: x 13-87%, y 26-72%)
+  -- gold window and the name in the open band beneath it. All positions
+  -- come from TT.LAYOUT (Data.lua) so new art only needs re-measuring.
+  local m = TT.CardFaceMetrics(110, 190, 3)
   c.front = c:CreateTexture(nil, "ARTWORK")
   c.front:SetPoint("TOPLEFT", 3, -3)
   c.front:SetPoint("BOTTOMRIGHT", -3, 3)
@@ -298,13 +298,13 @@ local function CreateRevealCard(parent)
   c.front:Hide()
 
   c.icon = c:CreateTexture(nil, "ARTWORK", nil, 1)
-  c.icon:SetPoint("TOPLEFT", 17, -50)
-  c.icon:SetPoint("BOTTOMRIGHT", -17, 55)
+  c.icon:SetPoint("TOPLEFT", m.iconLeft, -m.iconTop)
+  c.icon:SetPoint("BOTTOMRIGHT", -m.iconRight, m.iconBottom)
   c.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
   c.icon:Hide()
 
   c.name = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.name:SetPoint("TOP", c, "TOP", 0, -140)
+  c.name:SetPoint("TOP", c, "TOP", 0, -m.nameTop)
   c.name:SetWidth(92)
 
   return c
@@ -681,24 +681,25 @@ end
 
 local function CreateBinderCell(parent)
   -- a miniature card face: front-frame art, item icon in the art's gold
-  -- window, name in the band below (window fractions: x 15.5%, y 26-71%)
+  -- window, name in the band below. Positions come from TT.LAYOUT.
   local c = CreateFrame("Button", nil, parent, "BackdropTemplate")
   c:SetSize(116, 200)
   c:SetBackdrop(BOX_BACKDROP)
   c:SetBackdropColor(0.05, 0.05, 0.08, 1)
 
+  local m = TT.CardFaceMetrics(116, 200, 2)
   c.front = c:CreateTexture(nil, "ARTWORK")
   c.front:SetPoint("TOPLEFT", 2, -2)
   c.front:SetPoint("BOTTOMRIGHT", -2, 2)
   c.front:SetTexture(TT.CARD_FRONT_TEX)
 
   c.icon = c:CreateTexture(nil, "ARTWORK", nil, 1)
-  c.icon:SetPoint("TOPLEFT", 18, -53)
-  c.icon:SetPoint("BOTTOMRIGHT", -18, 58)
+  c.icon:SetPoint("TOPLEFT", m.iconLeft, -m.iconTop)
+  c.icon:SetPoint("BOTTOMRIGHT", -m.iconRight, m.iconBottom)
   c.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
 
   c.name = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.name:SetPoint("TOP", c, "TOP", 0, -146)
+  c.name:SetPoint("TOP", c, "TOP", 0, -m.nameTop)
   c.name:SetWidth(94)
   if c.name.SetMaxLines then c.name:SetMaxLines(2) end
 
@@ -716,7 +717,7 @@ local function CreateBinderCell(parent)
 
   c.aura = c:CreateTexture(nil, "BACKGROUND", nil, -1)
   c.aura:SetPoint("CENTER")
-  c.aura:SetSize(175, 260)
+  c.aura:SetSize(116 * TT.LAYOUT.auraScale, 200 * TT.LAYOUT.auraScale)
   c.aura:SetTexture(FOIL_TEXTURE)
   c.aura:SetBlendMode("ADD")
   c.aura:SetVertexColor(1, 0.85, 0.3, 0)
@@ -893,9 +894,10 @@ local function RefreshBinder()
         StopLoop("binderfoil")
         return
       end
-      local pulse = math.sin(now * 2.5)
-      local sheen = 0.20 + 0.14 * pulse
-      local auraA = 0.55 + 0.30 * pulse
+      local L = TT.LAYOUT
+      local pulse = math.sin(now * L.foilPulseSpeed)
+      local sheen = L.sheenBase + L.sheenSwing * pulse
+      local auraA = L.auraBase + L.auraSwing * pulse
       for _, cell in ipairs(ui.binderCells) do
         if cell:IsShown() and cell.isFoil then
           cell.foilGlow:SetAlpha(sheen)
