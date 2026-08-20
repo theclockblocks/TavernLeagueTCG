@@ -1,0 +1,15 @@
+# Tavern League TCG - the card edits file. This is THE place to change
+# what's in the card pool. After editing, run: node tools/build.js
+#
+# One line per edit:  itemId,action[,tier[,tbcOnly,name]]
+#
+#   itemId,exclude                 remove the item from the pool
+#   itemId,tier,N                  force rarity (1 common .. 5 legendary)
+#   itemId,add,N,tbcOnly,Name      add an item the datasets lack
+#                                  (tbcOnly: 1 = TBC-only, 0 = everywhere;
+#                                   the name may contain commas)
+#
+# Examples (delete the leading # to activate):
+# 32824,exclude                    # Trashbringer - unobtainable
+# 17182,tier,5                     # Sulfuras stays legendary
+# 99999,add,3,0,Homebrew Tavern Mug

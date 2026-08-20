@@ -120,10 +120,9 @@ hatch - is recorded in the run's event log.
 
 ## Contributing
 
-Want to fix card data, improve the art, or hack on the addon? Everything
-is a one-command pipeline - adding/removing/re-tiering cards is two CSV
-files, card art rebuilds from any PNG you drop in `Art/`, and the card
-layout is a documented config table. See **[CONTRIBUTING.md](CONTRIBUTING.md)**.
+One edits file (`tools/cards.csv`), one command (`node tools/build.js`) -
+that covers card changes and art alike. See
+**[CONTRIBUTING.md](CONTRIBUTING.md)**.
 
 ## License
 
