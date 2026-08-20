@@ -706,13 +706,20 @@ local function CreateBinderCell(parent)
   c.count:SetPoint("BOTTOMRIGHT", c.icon, "BOTTOMRIGHT", -3, 3)
   c.count:SetTextColor(1, 0.82, 0)
 
-  -- foil cards get a gently pulsing golden sheen instead of a text tag
+  -- foil cards pulse a golden sheen and radiate an aura past the card edges
   c.foilGlow = c:CreateTexture(nil, "ARTWORK", nil, 2)
   c.foilGlow:SetPoint("TOPLEFT", 2, -2)
   c.foilGlow:SetPoint("BOTTOMRIGHT", -2, 2)
   c.foilGlow:SetColorTexture(1, 0.85, 0.3, 1)
   c.foilGlow:SetBlendMode("ADD")
   c.foilGlow:SetAlpha(0)
+
+  c.aura = c:CreateTexture(nil, "BACKGROUND", nil, -1)
+  c.aura:SetPoint("CENTER")
+  c.aura:SetSize(175, 260)
+  c.aura:SetTexture(FOIL_TEXTURE)
+  c.aura:SetBlendMode("ADD")
+  c.aura:SetVertexColor(1, 0.85, 0.3, 0)
 
   c.newTag = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   c.newTag:SetPoint("TOPLEFT", c.icon, "TOPLEFT", 3, -3)
@@ -857,7 +864,10 @@ local function RefreshBinder()
       end
       cell.count:SetText(ownedCard and ("x" .. (n + f)) or "")
       cell.isFoil = (f > 0)
-      if not cell.isFoil then cell.foilGlow:SetAlpha(0) end
+      if not cell.isFoil then
+        cell.foilGlow:SetAlpha(0)
+        cell.aura:SetVertexColor(1, 0.85, 0.3, 0)
+      end
       local seen = p.firstSeen[key]
       cell.newTag:SetShown(ownedCard and seen ~= nil and (now - seen) < 86400)
       cell:Show()
@@ -865,6 +875,7 @@ local function RefreshBinder()
     else
       cell.isFoil = false
       cell.foilGlow:SetAlpha(0)
+      cell.aura:SetVertexColor(1, 0.85, 0.3, 0)
       cell:Hide()
     end
   end
@@ -882,10 +893,13 @@ local function RefreshBinder()
         StopLoop("binderfoil")
         return
       end
-      local a = 0.10 + 0.07 * math.sin(now * 2.5)
+      local pulse = math.sin(now * 2.5)
+      local sheen = 0.20 + 0.14 * pulse
+      local auraA = 0.55 + 0.30 * pulse
       for _, cell in ipairs(ui.binderCells) do
         if cell:IsShown() and cell.isFoil then
-          cell.foilGlow:SetAlpha(a)
+          cell.foilGlow:SetAlpha(sheen)
+          cell.aura:SetVertexColor(1, 0.85, 0.3, auraA)
         end
       end
     end)
