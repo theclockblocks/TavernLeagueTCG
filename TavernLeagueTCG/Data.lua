@@ -195,4 +195,5 @@ TT.SLOT_BUCKETS = {
 
 TT.QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
 TT.CARD_BACK_ICON = "Interface\\Icons\\INV_Misc_Ticket_Tarot_Stack_01"  -- minimap/tab icon
-TT.CARD_BACK_TEX = "Interface\\AddOns\\TavernLeagueTCG\\art\\cardback"  -- the card back art
+TT.CARD_BACK_TEX = "Interface\\AddOns\\TavernLeagueTCG\\art\\cardback"    -- the card back art
+TT.CARD_FRONT_TEX = "Interface\\AddOns\\TavernLeagueTCG\\art\\cardfront"  -- face-up card frame

@@ -288,22 +288,27 @@ local function CreateRevealCard(parent)
   c.back:SetPoint("BOTTOMRIGHT", -3, 3)
   c.back:SetTexture(TT.CARD_BACK_TEX)
 
-  -- face-up art
-  c.icon = c:CreateTexture(nil, "ARTWORK")
-  c.icon:SetSize(56, 56)
-  c.icon:SetPoint("TOP", 0, -20)
+  -- face-up: the card front frame, with the item icon inside the frame's
+  -- gold window and the name in the open band beneath it (window position
+  -- measured from the art: x 13-87%, y 26-72%)
+  c.front = c:CreateTexture(nil, "ARTWORK")
+  c.front:SetPoint("TOPLEFT", 3, -3)
+  c.front:SetPoint("BOTTOMRIGHT", -3, 3)
+  c.front:SetTexture(TT.CARD_FRONT_TEX)
+  c.front:Hide()
+
+  c.icon = c:CreateTexture(nil, "ARTWORK", nil, 1)
+  c.icon:SetPoint("TOPLEFT", 17, -50)
+  c.icon:SetPoint("BOTTOMRIGHT", -17, 55)
   c.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
   c.icon:Hide()
 
   c.name = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.name:SetPoint("TOP", c.icon, "BOTTOM", 0, -8)
-  c.name:SetWidth(98)
-
-  c.rarity = c:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  c.rarity:SetPoint("BOTTOM", 0, 10)
+  c.name:SetPoint("TOP", c, "TOP", 0, -140)
+  c.name:SetWidth(92)
 
   c.foilTag = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-  c.foilTag:SetPoint("TOP", 0, -6)
+  c.foilTag:SetPoint("TOP", 0, -8)
   c.foilTag:SetText("FOIL")
   c.foilTag:SetTextColor(1, 0.85, 0.3)
   c.foilTag:Hide()
@@ -315,9 +320,9 @@ local function SetCardFaceDown(c)
   c:SetBackdropColor(0.10, 0.09, 0.14, 1)
   c:SetBackdropBorderColor(0.35, 0.32, 0.45)
   c.back:Show()
+  c.front:Hide()
   c.icon:Hide()
   c.name:SetText("")
-  c.rarity:SetText("")
   c.foilTag:Hide()
   c.glow:SetVertexColor(1, 0.85, 0.3, 0)
   c.faceUp = false
@@ -331,6 +336,7 @@ local function SetCardFaceUp(c, cardData)
   c:SetBackdropColor(0.08, 0.08, 0.10, 1)
   c:SetBackdropBorderColor(r, g, b)
   c.back:Hide()
+  c.front:Show()
   c.icon:SetTexture(CardIcon(key))
   c.icon:Show()
 
@@ -338,8 +344,6 @@ local function SetCardFaceUp(c, cardData)
   c.pendingKey = name and nil or key
   c.name:SetText(name or "...")
   c.name:SetTextColor(r, g, b)
-  c.rarity:SetText(TT.RarityLabel(tier))
-  c.rarity:SetTextColor(r, g, b)
   c.foilTag:SetShown(foil and true or false)
 
   if foil then
