@@ -137,6 +137,103 @@ local function CardRarity(key)
 end
 
 ---------------------------------------------------------------------------
+-- 3D creature card art: owned creature cards render the NPC's live game
+-- model in the card window via a lazily-created PlayerModel child. The
+-- per-set icon stays underneath as loading/fallback art; a dark backdrop
+-- appears only once real geometry loads, so an NPC the client can't
+-- resolve degrades back to the icon instead of an empty hole. Model data
+-- for unseen NPCs can arrive async, hence the OnModelLoaded hook plus a
+-- couple of retries.
+---------------------------------------------------------------------------
+
+local function CardModel_Frame(m)
+  -- camera framing only sticks once geometry exists
+  if m.SetPortraitZoom then
+    m:SetPortraitZoom(TT.MODEL.portraitZoom)
+  elseif m.SetCamera then
+    m:SetCamera(0)
+  end
+  m:SetFacing(TT.MODEL.facing)
+end
+
+local function CardModel_Loaded(m)
+  m.loaded = true
+  m.cell.modelBg:Show()
+  CardModel_Frame(m)
+end
+
+local function CardModel_ScheduleRetry(m)
+  local id = m.npcId
+  m.pendingRetry = true
+  C_Timer.After(0.8, function()
+    m.pendingRetry = false
+    if m.npcId ~= id or m.loaded or not m:IsVisible() then return end
+    -- clients without OnModelLoaded: detect a quiet success by file id
+    if m.GetModelFileID and m:GetModelFileID() then
+      CardModel_Loaded(m)
+      return
+    end
+    if m.retries >= 2 then return end
+    m.retries = m.retries + 1
+    m:ClearModel()
+    m:SetCreature(id)
+    CardModel_ScheduleRetry(m)
+  end)
+end
+
+local function EnsureCardModel(c)
+  if c.model then return c.model end
+  -- dark window backdrop, revealed only when a model actually loads
+  c.modelBg = c:CreateTexture(nil, "ARTWORK", nil, 2)
+  c.modelBg:SetPoint("TOPLEFT", c.icon, "TOPLEFT")
+  c.modelBg:SetPoint("BOTTOMRIGHT", c.icon, "BOTTOMRIGHT")
+  c.modelBg:SetColorTexture(unpack(TT.MODEL.bg))
+  c.modelBg:Hide()
+
+  local m = CreateFrame("PlayerModel", nil, c)
+  m:SetPoint("TOPLEFT", c.icon, "TOPLEFT")
+  m:SetPoint("BOTTOMRIGHT", c.icon, "BOTTOMRIGHT")
+  m:SetFrameLevel(c:GetFrameLevel() + 1)
+  m.cell = c
+  if m:HasScript("OnModelLoaded") then
+    m:SetScript("OnModelLoaded", CardModel_Loaded)
+  end
+  m:Hide()
+  c.model = m
+  return m
+end
+
+local function SetCardModel(c, npcId)
+  local m = EnsureCardModel(c)
+  if m.npcId == npcId then
+    m:Show()
+    if m.loaded then
+      c.modelBg:Show()
+    elseif not m.pendingRetry then
+      -- earlier attempt came up empty (NPC not cached yet) - try again
+      m:ClearModel()
+      m:SetCreature(npcId)
+      CardModel_ScheduleRetry(m)
+    end
+    return
+  end
+  m.npcId = npcId
+  m.loaded = false
+  m.retries = 0
+  c.modelBg:Hide()
+  m:Show()
+  m:ClearModel()
+  m:SetCreature(npcId)
+  CardModel_ScheduleRetry(m)
+end
+
+local function ClearCardModel(c)
+  if not c.model then return end
+  c.model:Hide()
+  c.modelBg:Hide()
+end
+
+---------------------------------------------------------------------------
 -- Frame construction
 ---------------------------------------------------------------------------
 
@@ -328,6 +425,7 @@ local function SetCardFaceDown(c)
   c.back:Show()
   c.front:Hide()
   c.icon:Hide()
+  ClearCardModel(c)
   c.name:SetText("")
   c.glow:SetVertexColor(1, 0.85, 0.3, 0)
   c.faceUp = false
@@ -344,6 +442,14 @@ local function SetCardFaceUp(c, cardData)
   c.front:Show()
   c.icon:SetTexture(CardIcon(key))
   c.icon:Show()
+
+  -- creature cards wear their live 3D model over the fallback icon
+  local row = TT.cardIndex and TT.cardIndex[key]
+  if row and (row.kind or "item") == "npc" then
+    SetCardModel(c, row.i)
+  else
+    ClearCardModel(c)
+  end
 
   local name = CardName(key)
   c.pendingKey = name and nil or key
@@ -717,12 +823,18 @@ local function CreateBinderCell(parent)
   c.name:SetWidth(94)
   if c.name.SetMaxLines then c.name:SetMaxLines(2) end
 
-  c.count = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  -- badges and the foil sheen live on a child frame two levels up so they
+  -- stay visible above the 3D creature model (which sits one level up)
+  local overlayFrame = CreateFrame("Frame", nil, c)
+  overlayFrame:SetAllPoints(c)
+  overlayFrame:SetFrameLevel(c:GetFrameLevel() + 2)
+
+  c.count = overlayFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   c.count:SetPoint("BOTTOMRIGHT", c.icon, "BOTTOMRIGHT", -3, 3)
   c.count:SetTextColor(1, 0.82, 0)
 
   -- foil cards pulse a golden sheen and radiate an aura past the card edges
-  c.foilGlow = c:CreateTexture(nil, "ARTWORK", nil, 2)
+  c.foilGlow = overlayFrame:CreateTexture(nil, "ARTWORK", nil, 2)
   c.foilGlow:SetPoint("TOPLEFT", 2, -2)
   c.foilGlow:SetPoint("BOTTOMRIGHT", -2, 2)
   c.foilGlow:SetColorTexture(1, 0.85, 0.3, 1)
@@ -736,7 +848,7 @@ local function CreateBinderCell(parent)
   c.aura:SetBlendMode("ADD")
   c.aura:SetVertexColor(1, 0.85, 0.3, 0)
 
-  c.newTag = c:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  c.newTag = overlayFrame:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
   c.newTag:SetPoint("TOPLEFT", c.icon, "TOPLEFT", 3, -3)
   c.newTag:SetText("NEW")
   c.newTag:SetTextColor(0.3, 1, 0.3)
@@ -864,9 +976,18 @@ local function RefreshBinder()
       local ownedCard = (n + f) > 0
       local r, g, bl = TT.RarityColor(row.r)
 
-      cell.itemId = ((row.kind or "item") == "item") and row.i or nil
+      local isNpc = (row.kind or "item") == "npc"
+      cell.itemId = (not isNpc) and row.i or nil
       cell.cardKey = key
-      cell.icon:SetTexture(CardIcon(key))
+      if isNpc and ownedCard then
+        -- live 3D model; the set icon underneath covers the load gap
+        cell.icon:SetTexture(CardIcon(key))
+        SetCardModel(cell, row.i)
+      else
+        -- unowned creatures are a mystery: "?" until you pull the card
+        ClearCardModel(cell)
+        cell.icon:SetTexture(isNpc and TT.QUESTION_MARK or CardIcon(key))
+      end
       cell.icon:SetDesaturated(not ownedCard)
       cell.icon:SetAlpha(ownedCard and 1 or 0.4)
       -- missing cards render as ghost cards: whole face desaturated
@@ -898,6 +1019,7 @@ local function RefreshBinder()
       cell.isFoil = false
       cell.foilGlow:SetAlpha(0)
       cell.aura:SetVertexColor(1, 0.85, 0.3, 0)
+      ClearCardModel(cell)
       cell:Hide()
     end
   end

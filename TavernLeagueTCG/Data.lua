@@ -161,9 +161,10 @@ TT.RegisterCategory("item", {
   LockCheck = "equip",
 })
 
--- Creature cards (quest NPCs, quest-target mobs, rares, bosses). No
--- portrait API exists, so icons come from a per-set map for now - the
--- community art lane can upgrade this later.
+-- Creature cards (quest NPCs, quest-target mobs, rares, bosses). Owned
+-- cards render the NPC's live 3D game model in the card window (see the
+-- card-model helpers in UI.lua); these per-set icons are the fallback art
+-- while a model streams in - and unowned creatures show the "?" icon.
 TT.NPC_SET_ICONS = {
   questnpc = "Interface\\Icons\\INV_Scroll_03",
   mob      = "Interface\\Icons\\INV_Misc_MonsterClaw_03",
@@ -262,6 +263,15 @@ TT.LAYOUT = {
   auraScale = 1.4,          -- aura size relative to the card
   -- pack selection screen tints (three packs: warm / cool / green)
   packArtTints = { { 1, 0.87, 0.87 }, { 0.87, 0.92, 1 }, { 0.87, 1, 0.9 } },
+}
+
+-- Camera framing for the 3D creature model in the card window. Oversized
+-- models (dragons, giants) may still sit awkwardly at these defaults -
+-- tune here, not in UI code.
+TT.MODEL = {
+  portraitZoom = 0.55,  -- 0 = full body, 1 = face close-up (when the client supports it)
+  facing       = 0.45,  -- radians of turn; a slight three-quarter angle
+  bg           = { 0.04, 0.04, 0.07, 1 },  -- backdrop behind the model
 }
 
 -- Computes pixel positions for a card face of a given size: where the item
