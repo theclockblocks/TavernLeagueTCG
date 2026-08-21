@@ -145,13 +145,17 @@ end
 
 function TT.BuildPoolIndex()
   TT.cardIndex = {}     -- [cardKey] = row
-  TT.poolByRarity = {}  -- [tier] = { row, ... }
+  TT.poolByType = {}    -- [packType][tier] = { row, ... }
   TT.poolCount = 0
-  for tier = 1, TT.MAX_RARITY do TT.poolByRarity[tier] = {} end
+  for _, ptype in ipairs(TT.PACK_TYPES) do
+    TT.poolByType[ptype.key] = {}
+    for tier = 1, TT.MAX_RARITY do TT.poolByType[ptype.key][tier] = {} end
+  end
   for _, row in ipairs(TT.pool or {}) do
     if not TT.IsGated(row) then
       TT.cardIndex[TT.CardKey(row)] = row
-      local bucket = TT.poolByRarity[row.r] or TT.poolByRarity[1]
+      local byTier = TT.poolByType[TT.PackTypeOf(row)]
+      local bucket = byTier[row.r] or byTier[1]
       bucket[#bucket + 1] = row
       TT.poolCount = TT.poolCount + 1
     end
@@ -569,9 +573,11 @@ function TT.SellCard(key, foil)
 end
 
 ---------------------------------------------------------------------------
--- Pack engine. Contents are rolled and PERSISTED at purchase, before any
--- UI shows - the 3-pack selection screen is pure theater and relogging at
--- any stage resumes exactly where you were.
+-- Pack engine. Buying pays and persists an UNOPENED pack; the player then
+-- picks a pack TYPE (Equipment / Trade Goods / Creatures) and the contents
+-- roll from that type's pool, persisting immediately - so the pick is a
+-- real choice, nothing is rolled before it, and relogging at any stage
+-- resumes exactly where you were with nothing to reroll.
 ---------------------------------------------------------------------------
 
 local function rollTier(odds)
@@ -584,17 +590,17 @@ local function rollTier(odds)
   return 1
 end
 
--- Some tiers can be empty on a client (e.g. no legendaries in a pilot
--- pool): fall back to the nearest lower populated tier.
-local function pickCard(tier)
+-- Some tiers can be thin in a given type's pool (e.g. few creature epics):
+-- fall back to the nearest lower populated tier, then upward.
+local function pickCard(byTier, tier)
   for t = tier, 1, -1 do
-    local bucket = TT.poolByRarity[t]
+    local bucket = byTier[t]
     if bucket and #bucket > 0 then
       return bucket[math.random(#bucket)], t
     end
   end
   for t = tier + 1, TT.MAX_RARITY do
-    local bucket = TT.poolByRarity[t]
+    local bucket = byTier[t]
     if bucket and #bucket > 0 then
       return bucket[math.random(#bucket)], t
     end
@@ -602,8 +608,10 @@ local function pickCard(tier)
   return nil
 end
 
-function TT.RollPack()
+function TT.RollPack(packType)
   local E = TT.ECON
+  local byTier = TT.poolByType[packType]
+  if not byTier then return nil end
   local god = (math.random(E.godChance) == 1)
   if TT.forceGodPack then
     god = true
@@ -621,16 +629,17 @@ function TT.RollPack()
         and TT.Profile().pity >= E.pityEpic and tier < 4 then
       tier = 4
     end
-    local row, actual = pickCard(tier)
+    local row, actual = pickCard(byTier, tier)
     if not row then return nil end
     if actual >= 4 then sawEpic = true end
     local foil = god or (math.random(E.foilChance) == 1)
     cards[slot] = { k = TT.CardKey(row), f = foil }
   end
 
-  return { cards = cards, revealed = 0, ripped = false, god = god }
+  return { cards = cards, revealed = 0, ptype = packType, god = god }
 end
 
+-- Pays for a pack; contents don't exist until the type is picked.
 function TT.BuyPack()
   local p = TT.Profile()
   if p.pendingPack then
@@ -642,16 +651,25 @@ function TT.BuyPack()
     TT.Warn("Not enough credits (" .. TT.FormatNumber(TT.ECON.packPrice) .. " needed).")
     return false
   end
-  local pack = TT.RollPack()
-  if not pack then
-    TT.Warn("The card pool is empty on this client!")
-    return false
-  end
-  -- pay + persist BEFORE any reveal UI: relogging can't reroll
   if useFree then
     p.freePacks = p.freePacks - 1
   else
     p.credits = p.credits - TT.ECON.packPrice
+  end
+  p.pendingPack = { unopened = true }
+  TT.Refresh()
+  return true
+end
+
+-- The player committed to a pack type: roll + persist before any reveal.
+function TT.PickPackType(packType)
+  local p = TT.Profile()
+  local pending = p.pendingPack
+  if not pending or pending.cards then return false end
+  local pack = TT.RollPack(packType)
+  if not pack then
+    TT.Warn("That card pool is empty on this client!")
+    return false
   end
   p.pendingPack = pack
   if pack.god then
@@ -664,21 +682,13 @@ function TT.BuyPack()
     end
     p.pity = hasEpic and 0 or (p.pity + 1)
   end
-  TT.Refresh()
   return true
-end
-
-function TT.RipPack()
-  local p = TT.Profile()
-  if p.pendingPack then
-    p.pendingPack.ripped = true
-  end
 end
 
 function TT.RevealNext()
   local p = TT.Profile()
   local pack = p.pendingPack
-  if not pack then return nil end
+  if not pack or not pack.cards then return nil end
   if pack.revealed >= #pack.cards then return nil end
   pack.revealed = pack.revealed + 1
   return pack.revealed, pack.cards[pack.revealed]
@@ -687,7 +697,7 @@ end
 function TT.FinishPack()
   local p = TT.Profile()
   local pack = p.pendingPack
-  if not pack then return end
+  if not pack or not pack.cards then return end
   local name = UnitName("player")
   local newCount = 0
 
@@ -714,12 +724,18 @@ function TT.FinishPack()
 end
 
 -- Dev helper: roll N packs without paying and print a rarity histogram.
-function TT.SimulatePacks(count)
+function TT.SimulatePacks(args)
+  local count, ptype = tostring(args or ""):match("^(%d*)%s*(%a*)$")
   count = math.min(tonumber(count) or 100, 100000)
+  ptype = (ptype ~= "" and ptype) or "equipment"
+  if not TT.poolByType[ptype] then
+    TT.Msg("Usage: simulate N [equipment|goods|creatures]")
+    return
+  end
   local hist, foils, gods = {}, 0, 0
   local savedPity = TT.Profile().pity
   for _ = 1, count do
-    local pack = TT.RollPack()
+    local pack = TT.RollPack(ptype)
     if not pack then TT.Msg("Pool empty."); return end
     if pack.god then gods = gods + 1 end
     for _, c in ipairs(pack.cards) do

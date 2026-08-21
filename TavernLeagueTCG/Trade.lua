@@ -482,7 +482,8 @@ end
 local function botMakeOffer()
   local entries = {}
   for _ = 1, math.random(1, 3) do
-    local bucket = TT.poolByRarity[math.random(1, 3)]
+    local ptype = TT.PACK_TYPES[math.random(#TT.PACK_TYPES)]
+    local bucket = TT.poolByType[ptype.key][math.random(1, 3)]
     if bucket and #bucket > 0 then
       local row = bucket[math.random(#bucket)]
       entries[#entries + 1] = { k = TT.CardKey(row), f = (math.random(10) == 1) }

@@ -244,12 +244,13 @@ local PACK_TINTS = {
 }
 
 local function CreateSealedPack(parent, index)
+  local ptype = TT.PACK_TYPES[index]
   local p = CreateFrame("Button", nil, parent, "BackdropTemplate")
   p:SetSize(140, 230)
   p:SetBackdrop(PANEL_BACKDROP)
   p:SetBackdropColor(unpack(PACK_TINTS[index]))
   p:SetBackdropBorderColor(GOLD.r, GOLD.g, GOLD.b)
-  p.baseY = 0
+  p.packType = ptype.key
 
   -- the card back art fills the pack; a subtle per-pack tint keeps the
   -- three choices visually distinct
@@ -258,6 +259,17 @@ local function CreateSealedPack(parent, index)
   p.art:SetPoint("BOTTOMRIGHT", -3, 3)
   p.art:SetTexture(TT.CARD_BACK_TEX)
   p.art:SetVertexColor(unpack(TT.LAYOUT.packArtTints[index]))
+
+  -- the pick is a real choice now: label each pack with its type
+  p.label = p:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+  p.label:SetPoint("TOP", p, "BOTTOM", 0, -8)
+  p.label:SetText(ptype.label)
+  p.label:SetTextColor(GOLD.r, GOLD.g, GOLD.b)
+
+  p.sub = p:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  p.sub:SetPoint("TOP", p.label, "BOTTOM", 0, -2)
+  p.sub:SetText(ptype.sub)
+  p.sub:SetTextColor(0.6, 0.6, 0.6)
 
   p:SetScript("OnEnter", function(self)
     self:SetBackdropBorderColor(1, 1, 1)
@@ -511,7 +523,7 @@ end
 local function EnterRevealStage()
   OverlayShowStage("reveal")
   local pack = TT.Profile().pendingPack
-  if not pack then overlay:Hide(); return end
+  if not pack or not pack.cards then overlay:Hide(); return end
   for i, c in ipairs(ui.revealCards) do
     StopLoop("foil" .. tostring(c))
     if i <= pack.revealed then
@@ -529,7 +541,9 @@ local function EnterRevealStage()
 end
 
 local function OnPackChosen(chosen)
-  TT.RipPack()
+  -- the pick decides which pool the pack rolls from; contents are rolled
+  -- and persisted here, before any reveal
+  if not TT.PickPackType(chosen.packType) then return end
   TT.PlaySoundKit("IG_BACKPACK_OPEN")
   StopLoop("packbob")
   ui.selectLockout = true
@@ -563,7 +577,7 @@ local function BuildSelectStage(parent)
   stage:SetAllPoints(parent)
   ui.selectStage = stage
 
-  local title = CreateHeader(stage, "Pick your pack")
+  local title = CreateHeader(stage, "Pick your pack - the choice decides what's inside")
   title:SetPoint("TOP", 0, -30)
 
   local W, GAP = 140, 40
@@ -580,7 +594,7 @@ local function BuildSelectStage(parent)
   local sub = stage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   sub:SetPoint("BOTTOM", 0, 40)
   sub:SetTextColor(0.55, 0.55, 0.55)
-  sub:SetText("Trust your gut.")
+  sub:SetText("Same odds in every pack - the type picks the pool.")
 end
 
 local function EnterSelectStage()
@@ -626,7 +640,7 @@ function TT.UI_ShowPackOverlay()
   if not pack then return end
   frame:Show()
   overlay:Show()
-  if pack.ripped then
+  if pack.cards then
     EnterRevealStage()
   else
     EnterSelectStage()
@@ -763,31 +777,36 @@ local function CreateBinderCell(parent)
     end
   end)
   c:SetScript("OnEnter", function(self)
-    if not self.itemId then return end
+    if not self.cardKey then return end
+    local row = TT.cardIndex[self.cardKey]
+    if not row then return end
     ui.hoverCell = self
     GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    -- full item tooltips need the client cache; show a light card tooltip
-    -- until the data arrives (TT.ItemName kicks off the load, and
-    -- UI_OnItemCached re-runs this handler in place when it lands)
-    if TT.ItemName(self.itemId) then
-      GameTooltip:SetHyperlink("item:" .. self.itemId)
+    if self.itemId then
+      -- full item tooltips need the client cache; show a light card tooltip
+      -- until the data arrives (TT.ItemName kicks off the load, and
+      -- UI_OnItemCached re-runs this handler in place when it lands)
+      if TT.ItemName(self.itemId) then
+        GameTooltip:SetHyperlink("item:" .. self.itemId)
+      else
+        local r, g, b = TT.RarityColor(row.r)
+        GameTooltip:SetText(row.n or ("Item " .. self.itemId), r, g, b)
+        GameTooltip:AddLine("Item details loading...", 0.6, 0.6, 0.6)
+      end
     else
-      local row = TT.cardIndex["item:" .. self.itemId]
-      local r, g, b = TT.RarityColor(row and row.r or 1)
-      GameTooltip:SetText(row and row.n or ("Item " .. self.itemId), r, g, b)
-      GameTooltip:AddLine("Item details loading...", 0.6, 0.6, 0.6)
+      -- creature card: everything we know ships with the pool
+      local r, g, b = TT.RarityColor(row.r)
+      GameTooltip:SetText(row.n or "?", r, g, b)
+      GameTooltip:AddLine(TT.NPC_SET_LABELS[row.s] or "Creature", 0.8, 0.8, 0.8)
     end
     if TT.Trade_IsOpen and TT.Trade_IsOpen() then
       GameTooltip:AddLine("Click: add to trade offer (Ctrl: foil copy)", 0.3, 1, 0.3)
     end
-    local hintRow = TT.cardIndex["item:" .. self.itemId]
-    if hintRow then
-      local col = TT.Profile().collection["item:" .. self.itemId]
-      local total = col and ((col.n or 0) + (col.f or 0)) or 0
-      if total > 1 then
-        GameTooltip:AddLine(("Right-click: sell a spare for %s credits (Ctrl: foil, x%d)"):format(
-          TT.FormatNumber(TT.ECON.sellValue[hintRow.r]), TT.ECON.foilSellMult), 0.6, 0.7, 1)
-      end
+    local col = TT.Profile().collection[self.cardKey]
+    local total = col and ((col.n or 0) + (col.f or 0)) or 0
+    if total > 1 then
+      GameTooltip:AddLine(("Right-click: sell a spare for %s credits (Ctrl: foil, x%d)"):format(
+        TT.FormatNumber(TT.ECON.sellValue[row.r]), TT.ECON.foilSellMult), 0.6, 0.7, 1)
     end
     GameTooltip:Show()
   end)
@@ -845,7 +864,7 @@ local function RefreshBinder()
       local ownedCard = (n + f) > 0
       local r, g, bl = TT.RarityColor(row.r)
 
-      cell.itemId = row.i
+      cell.itemId = ((row.kind or "item") == "item") and row.i or nil
       cell.cardKey = key
       cell.icon:SetTexture(CardIcon(key))
       cell.icon:SetDesaturated(not ownedCard)
@@ -872,7 +891,9 @@ local function RefreshBinder()
       cell.newTag:SetShown(isFresh)
       if isFresh then ui.freshKeys[key] = true end
       cell:Show()
-      pageRows[#pageRows + 1] = row
+      if (row.kind or "item") == "item" then
+        pageRows[#pageRows + 1] = row
+      end
     else
       cell.isFoil = false
       cell.foilGlow:SetAlpha(0)

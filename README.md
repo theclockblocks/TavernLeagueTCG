@@ -34,16 +34,21 @@ addon folder. TBC-only cards are hidden on Era clients.
 - **Starting on an existing character?** A one-time catch-up banks a pack
   for every level already earned, so a fresh max-level toon joins the run
   with a fat stack to rip. Logged in the event log; once per character.
-- **2,500 Credits buys a pack** of 8 cards: pick one of three sealed packs,
-  rip it open, and flip the cards one at a time. The final card is the
+- **2,500 Credits buys a pack** of 8 cards - and the pick matters: choose
+  an **Equipment** pack (weapons & armor), a **Trade Goods** pack, or a
+  **Creatures** pack (quest NPCs, notorious mobs, rare spawns and bosses),
+  then rip it open and flip the cards one at a time. The final card is the
   climax slot - guaranteed Uncommon or better, with the best odds of Epics
   and Legendaries. Every card has a 1-in-20 chance to be a **foil**, and
   1 pack in 250 is a **god pack**: all eight cards rolled on climax odds,
   all foil.
+- **Creature cards** (~6,100) are curated, not a mob dump: quest givers,
+  mobs that quests actually target (yes, Hogger), silver-dragon rares, and
+  worldbosses - Ragnaros and the faction leaders are legendary cards.
 - **Pity timer**: if 10 packs pass without an Epic+, the next climax card
   is forced Epic.
-- **The binder** shows the whole pool (~15,800 cards generated from real
-  item data) with paging, rarity/type/ownership filters and search.
+- **The binder** shows the whole pool (~22,000 cards generated from real
+  game data) with paging, rarity/type/ownership filters and search.
 - Pack contents are rolled and saved the moment you pay - relogging
   mid-open resumes the exact same pack. No reroll tricks.
 

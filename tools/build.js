@@ -36,6 +36,18 @@ const DATASETS = {
   tbc_data: 'https://registry.npmjs.org/wow-classic-items/-/wow-classic-items-1.0.0.tgz',
 };
 
+// Creature/NPC data comes from Questie's database (GPL, cmangos-derived),
+// pinned to a commit for reproducible builds.
+const QUESTIE_SHA = 'c51da22464665994eadeeb07043a6d094d35920b';
+const QUESTIE_FILES = {
+  era_npc: 'Database/Classic/classicNpcDB.lua',
+  era_quest: 'Database/Classic/classicQuestDB.lua',
+  era_item: 'Database/Classic/classicItemDB.lua',
+  tbc_npc: 'Database/TBC/tbcNpcDB.lua',
+  tbc_quest: 'Database/TBC/tbcQuestDB.lua',
+  tbc_item: 'Database/TBC/tbcItemDB.lua',
+};
+
 async function ensureDatasets() {
   fs.mkdirSync(CACHE, { recursive: true });
   for (const [name, url] of Object.entries(DATASETS)) {
@@ -55,6 +67,93 @@ async function ensureDatasets() {
     fs.unlinkSync(path.join(CACHE, `${name}.tgz`));
     console.log(`cached ${name}.json`);
   }
+  for (const [name, repoPath] of Object.entries(QUESTIE_FILES)) {
+    const out = path.join(CACHE, `${name}.lua`);
+    if (fs.existsSync(out)) continue;
+    const url = `https://raw.githubusercontent.com/Questie/Questie/${QUESTIE_SHA}/${repoPath}`;
+    console.log(`downloading ${url}`);
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
+    fs.writeFileSync(out, await res.text());
+    console.log(`cached ${name}.lua`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Minimal Lua-value parser: enough for Questie's generated data tables
+// (numbers, strings, nil/true/false, and tables with positional and
+// [key]= entries). Positional nils are kept so field indexes stay stable.
+// ---------------------------------------------------------------------------
+
+function parseLua(text) {
+  let i = 0;
+  function skipWs() {
+    for (;;) {
+      const c = text[i];
+      if (c === ' ' || c === '\t' || c === '\n' || c === '\r') i++;
+      else if (c === '-' && text[i + 1] === '-') {
+        while (i < text.length && text[i] !== '\n') i++;
+      } else break;
+    }
+  }
+  function parseString(q) {
+    i++;
+    let out = '';
+    while (i < text.length && text[i] !== q) {
+      if (text[i] === '\\') { out += text[i + 1]; i += 2; }
+      else { out += text[i]; i++; }
+    }
+    i++;
+    return out;
+  }
+  function parseTable() {
+    i++; // consume {
+    const arr = [];
+    const map = {};
+    let hasKeys = false;
+    for (;;) {
+      skipWs();
+      if (text[i] === '}') { i++; break; }
+      if (text[i] === '[') {
+        i++;
+        const key = parseValue();
+        skipWs(); i++; // ]
+        skipWs(); i++; // =
+        map[key] = parseValue();
+        hasKeys = true;
+      } else {
+        arr.push(parseValue());
+      }
+      skipWs();
+      if (text[i] === ',' || text[i] === ';') i++;
+    }
+    return hasKeys ? map : arr;
+  }
+  function parseValue() {
+    skipWs();
+    const c = text[i];
+    if (c === '{') return parseTable();
+    if (c === "'" || c === '"') return parseString(c);
+    if (text.startsWith('nil', i)) { i += 3; return null; }
+    if (text.startsWith('true', i)) { i += 4; return true; }
+    if (text.startsWith('false', i)) { i += 5; return false; }
+    let j = i;
+    while (j < text.length && /[-+0-9.eExA-Fa-f]/.test(text[j])) j++;
+    const n = Number(text.slice(i, j));
+    i = j;
+    return n;
+  }
+  skipWs();
+  if (text.startsWith('return', i)) i += 6;
+  return parseValue();
+}
+
+function loadQuestieTable(name) {
+  const txt = fs.readFileSync(path.join(CACHE, `${name}.lua`), 'utf8');
+  const a = txt.indexOf('[[return');
+  const b = txt.lastIndexOf(']]');
+  if (a < 0 || b < 0) throw new Error(`${name}.lua: unexpected format`);
+  return parseLua(txt.slice(a + 2, b));
 }
 
 // =========================================================================
@@ -114,14 +213,119 @@ function loadCardEdits() {
 function loadPreviousPoolIds() {
   if (!fs.existsSync(OUT_LUA)) return null;
   const ids = new Set();
-  for (const m of fs.readFileSync(OUT_LUA, 'utf8').matchAll(/^\{i=(\d+),/gm)) {
-    ids.add(parseInt(m[1], 10));
+  for (const line of fs.readFileSync(OUT_LUA, 'utf8').split('\n')) {
+    const m = line.match(/^\{i=(\d+),/);
+    if (m) ids.add((line.includes('kind="npc"') ? 'npc:' : 'item:') + m[1]);
   }
   return ids;
 }
 
 const isJunk = (name) => JUNK_PATTERNS.some((re) => re.test(name));
 const csvName = (name) => '"' + name.replace(/"/g, "'") + '"';
+
+// ---------------------------------------------------------------------------
+// Creature cards. Curation rules (this is the whole point - no card for
+// "Forest Spider #7"):
+//   worldboss rank (3)            -> boss,     legendary
+//   rare / rare-elite rank (4/2)  -> rare,     rare
+//   mobs that are quest OBJECTIVES-> mob,      uncommon (elite: rare)
+//   quest givers/enders           -> questnpc, common (elite: uncommon)
+// Everything else is skipped. Names are deduped (first id wins).
+// npcDB fields (0-based): 0 name, 3 minLevel, 4 maxLevel, 5 rank,
+// 9 questStarts, 10 questEnds
+// ---------------------------------------------------------------------------
+
+const NPC_JUNK = [
+  /only gm/i, /^\[/, /unused/i, /trigger/i, /waypoint/i, /spawn point/i,
+  /dummy/i, /\btest\b/i, /invisible/i, /placeholder/i, /credit\b/i,
+  /bunny/i, /marker/i, /controller/i, /^visual/i, /deprecated/i,
+  /^emote/i, /^summon/i, /\(old\)/i, /^old\b/i,
+];
+
+const isNpcJunk = (name) => NPC_JUNK.some((re) => re.test(name));
+
+// Kill objectives name the mob directly; "collect X" quests name an item,
+// which the item DB maps back to its droppers.
+function collectQuestMobs(questTable, intoMobs, intoItems) {
+  for (const q of Object.values(questTable)) {
+    const objectives = q && q[9];
+    if (!objectives) continue;
+    const creatureObjectives = objectives[0];
+    if (creatureObjectives) {
+      for (const co of creatureObjectives) {
+        if (co && typeof co[0] === 'number') intoMobs.add(co[0]);
+      }
+    }
+    const itemObjectives = objectives[2];
+    if (itemObjectives) {
+      for (const io of itemObjectives) {
+        if (io && typeof io[0] === 'number') intoItems.add(io[0]);
+      }
+    }
+  }
+}
+
+// Items a quest collects -> the NPCs that drop them ("Wanted: Hogger" is
+// an item objective). Widely-farmed items (>10 droppers) are skipped so
+// "collect 10 Linen Cloth" doesn't flag every humanoid in the game.
+function addQuestItemDroppers(itemTable, questItems, intoMobs) {
+  for (const id of questItems) {
+    const entry = itemTable[id];
+    const droppers = entry && entry[1];
+    if (droppers && droppers.length > 0 && droppers.length <= 10) {
+      for (const npcId of droppers) {
+        if (typeof npcId === 'number') intoMobs.add(npcId);
+      }
+    }
+  }
+}
+
+function classifyNpc(fields, questMobs, id) {
+  const name = fields[0];
+  if (typeof name !== 'string' || name === '' || isNpcJunk(name)) return null;
+  const rank = fields[5] || 0;
+  const givesQuests = (fields[9] && fields[9].length) || (fields[10] && fields[10].length);
+  if (rank === 3) return { set: 'boss', tier: 5 };
+  if (rank === 2 || rank === 4) return { set: 'rare', tier: 3 };
+  if (questMobs.has(id)) return { set: 'mob', tier: rank === 1 ? 3 : 2 };
+  if (givesQuests) return { set: 'questnpc', tier: rank === 1 ? 2 : 1 };
+  return null;
+}
+
+function buildCreatureRows() {
+  const eraNpcs = loadQuestieTable('era_npc');
+  const tbcNpcs = loadQuestieTable('tbc_npc');
+  const questMobs = new Set();
+  const questItems = new Set();
+  collectQuestMobs(loadQuestieTable('era_quest'), questMobs, questItems);
+  collectQuestMobs(loadQuestieTable('tbc_quest'), questMobs, questItems);
+  addQuestItemDroppers(loadQuestieTable('era_item'), questItems, questMobs);
+  addQuestItemDroppers(loadQuestieTable('tbc_item'), questItems, questMobs);
+
+  const eraIds = new Set(Object.keys(eraNpcs).map(Number));
+  const byId = new Map();
+  for (const [id, f] of Object.entries(tbcNpcs)) byId.set(Number(id), f);
+  for (const [id, f] of Object.entries(eraNpcs)) byId.set(Number(id), f);
+
+  const rows = [];
+  const seenNames = new Set();
+  const setCounts = {};
+  for (const id of [...byId.keys()].sort((a, b) => a - b)) {
+    const fields = byId.get(id);
+    const cls = classifyNpc(fields, questMobs, id);
+    if (!cls) continue;
+    const nameKey = fields[0].toLowerCase();
+    if (seenNames.has(nameKey)) continue;
+    seenNames.add(nameKey);
+    rows.push({
+      i: id, r: cls.tier, x: eraIds.has(id) ? 0 : 1,
+      n: fields[0], kind: 'npc', s: cls.set,
+    });
+    setCounts[cls.set] = (setCounts[cls.set] || 0) + 1;
+  }
+  console.log('creature sets:', setCounts);
+  return rows;
+}
 
 function buildPool() {
   const era = JSON.parse(fs.readFileSync(path.join(CACHE, 'era_data.json'), 'utf8'));
@@ -169,20 +373,30 @@ function buildPool() {
   }
   rows.sort((a, b) => a.i - b.i);
 
+  // creature/NPC cards, after the items (binder shows them grouped)
+  for (const c of buildCreatureRows()) {
+    rows.push(c);
+    included.push(`${c.i},${csvName(c.n)},npc:${c.s},npc,${c.r},${c.x}`);
+  }
+
   const byRarity = {};
   let tbcCount = 0;
+  let creatureCount = 0;
   for (const r of rows) {
     byRarity[r.r] = (byRarity[r.r] || 0) + 1;
     if (r.x) tbcCount++;
+    if (r.kind === 'npc') creatureCount++;
   }
-  console.log(`pool: ${rows.length} cards (${tbcCount} TBC-gated), excluded ${excluded.length}`);
+  console.log(`pool: ${rows.length} cards (${creatureCount} creatures, ${tbcCount} TBC-gated), ` +
+    `excluded ${excluded.length}`);
   console.log('rarity spread:', byRarity);
 
   // diff vs the previous CardPool.lua so pool PRs are reviewable
+  const rowKey = (r) => (r.kind === 'npc' ? 'npc:' : 'item:') + r.i;
   const prevIds = loadPreviousPoolIds();
   if (prevIds) {
-    const newIds = new Set(rows.map((r) => r.i));
-    const added = rows.filter((r) => !prevIds.has(r.i));
+    const newIds = new Set(rows.map(rowKey));
+    const added = rows.filter((r) => !prevIds.has(rowKey(r)));
     const removed = [...prevIds].filter((id) => !newIds.has(id));
     if (added.length === 0 && removed.length === 0) {
       console.log('diff vs previous pool: no card additions/removals');
@@ -200,15 +414,17 @@ function buildPool() {
   lines.push('-- Tavern League TCG card pool. GENERATED by tools/build.js -');
   lines.push('-- do not edit by hand. Edit tools/cards.csv, then: node tools/build.js');
   lines.push('--');
-  lines.push(`-- ${rows.length} cards (${tbcCount} TBC-gated). i = itemId, r = rarity tier 1-5,`);
-  lines.push('-- n = name (bundled so the binder never waits on the item cache),');
-  lines.push('-- x = 1 marks TBC-only items (skipped on Classic Era clients).');
+  lines.push(`-- ${rows.length} cards (${creatureCount} creatures, ${tbcCount} TBC-gated).`);
+  lines.push('-- i = itemId/npcId, r = rarity tier 1-5, n = name (bundled),');
+  lines.push('-- kind="npc" + s=set (questnpc/mob/rare/boss) marks creature cards,');
+  lines.push('-- x = 1 marks TBC-only entries (skipped on Classic Era clients).');
   lines.push('');
   lines.push('local ADDON, TT = ...');
   lines.push('');
   lines.push('TT.pool = {');
   for (const r of rows) {
-    lines.push(`{i=${r.i},r=${r.r},n=${luaName(r.n)}${r.x ? ',x=1' : ''}},`);
+    const extra = (r.kind === 'npc' ? `,kind="npc",s="${r.s}"` : '') + (r.x ? ',x=1' : '');
+    lines.push(`{i=${r.i},r=${r.r},n=${luaName(r.n)}${extra}},`);
   }
   lines.push('}');
   lines.push('');

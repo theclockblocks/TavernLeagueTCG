@@ -161,6 +161,33 @@ TT.RegisterCategory("item", {
   LockCheck = "equip",
 })
 
+-- Creature cards (quest NPCs, quest-target mobs, rares, bosses). No
+-- portrait API exists, so icons come from a per-set map for now - the
+-- community art lane can upgrade this later.
+TT.NPC_SET_ICONS = {
+  questnpc = "Interface\\Icons\\INV_Scroll_03",
+  mob      = "Interface\\Icons\\INV_Misc_MonsterClaw_03",
+  rare     = "Interface\\Icons\\INV_Misc_Head_Dragon_Blue",
+  boss     = "Interface\\Icons\\INV_Misc_Head_Dragon_01",
+}
+TT.NPC_SET_LABELS = {
+  questnpc = "Quest NPC",
+  mob      = "Notorious Mob",
+  rare     = "Rare Spawn",
+  boss     = "Boss",
+}
+
+TT.RegisterCategory("npc", {
+  label = "Creatures & NPCs",
+  GetIconNow = function(row)
+    return TT.NPC_SET_ICONS[row.s] or TT.QUESTION_MARK
+  end,
+  GetNameNow = function(row)
+    return row.n
+  end,
+  LockCheck = nil,   -- creature cards don't gate anything (yet)
+})
+
 -- Namespaced card keys so future kinds never collide: "item:16846"
 function TT.CardKey(row)
   return (row.kind or "item") .. ":" .. row.i
@@ -174,6 +201,7 @@ end
 -- Slot bucket for the binder filter, derived at runtime (nothing stored in
 -- the pool). itemClassID: 2 = Weapon, 4 = Armor, 7 = Trade Goods.
 function TT.SlotBucket(row)
+  if (row.kind or "item") == "npc" then return "creature" end
   local _, _, _, _, _, classID = GetItemInfoInstant(row.i)
   if classID == 2 then return "weapon"
   elseif classID == 4 then return "armor"
@@ -183,11 +211,28 @@ function TT.SlotBucket(row)
 end
 
 TT.SLOT_BUCKETS = {
-  { key = "all",    label = "All Types" },
-  { key = "weapon", label = "Weapons" },
-  { key = "armor",  label = "Armor" },
-  { key = "trade",  label = "Trade Goods" },
+  { key = "all",      label = "All Types" },
+  { key = "weapon",   label = "Weapons" },
+  { key = "armor",    label = "Armor" },
+  { key = "trade",    label = "Trade Goods" },
+  { key = "creature", label = "Creatures" },
 }
+
+-- Pack types: buying a pack presents these three; the player's pick
+-- decides which pool the contents roll from.
+TT.PACK_TYPES = {
+  { key = "equipment", label = "Equipment",   sub = "weapons & armor" },
+  { key = "goods",     label = "Trade Goods", sub = "materials & supplies" },
+  { key = "creatures", label = "Creatures",   sub = "NPCs, mobs & bosses" },
+}
+
+-- Which pack type a pool row belongs to.
+function TT.PackTypeOf(row)
+  local bucket = TT.SlotBucket(row)
+  if bucket == "creature" then return "creatures" end
+  if bucket == "weapon" or bucket == "armor" then return "equipment" end
+  return "goods"
+end
 
 ---------------------------------------------------------------------------
 -- Misc constants

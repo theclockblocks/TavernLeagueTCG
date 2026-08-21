@@ -2,7 +2,7 @@
 ## Title: Tavern League TCG
 ## Notes: Collect trading cards from packs earned by playing. Optional TCG Locked challenge mode: only equip gear whose card you own.
 ## Author: theclockblocks
-## Version: 0.3.0
+## Version: 0.4.0
 ## SavedVariables: TavernLeagueTCGDB
 ## SavedVariablesPerCharacter: TavernLeagueTCGCharDB
 ## IconTexture: Interface\Icons\INV_Misc_Ticket_Tarot_Stack_01
