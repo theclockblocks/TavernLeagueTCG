@@ -608,9 +608,9 @@ local function FlipCard(c, idx, cardData)
         if RaidNotice_AddMessage and RaidWarningFrame then
           RaidNotice_AddMessage(RaidWarningFrame, "GOD PACK!", ChatTypeInfo["RAID_WARNING"])
         end
-        TT.PlaySoundKit("RAID_WARNING")
+        TT.PlaySoundKit(TT.SOUND_WARHORN)
       elseif isClimax and tier >= 3 then
-        TT.PlaySoundKit("RAID_WARNING")
+        TT.PlaySoundKit(TT.SOUND_FANFARE)
         local flashW = ui.climaxFlash
         local r, g, b = TT.RarityColor(tier)
         flashW:SetColorTexture(r, g, b, 0.35)

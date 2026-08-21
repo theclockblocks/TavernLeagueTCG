@@ -112,8 +112,13 @@ function TT.Warn(text)
   TT.Msg(text)
 end
 
+-- kit: a SOUNDKIT constant name, or a raw soundkit id for sounds that
+-- have no constant (see TT.SOUND_* in Data.lua)
 local function playSound(kit)
-  if PlaySound and SOUNDKIT and SOUNDKIT[kit] then
+  if not PlaySound then return end
+  if type(kit) == "number" then
+    PlaySound(kit)
+  elseif SOUNDKIT and SOUNDKIT[kit] then
     PlaySound(SOUNDKIT[kit])
   end
 end

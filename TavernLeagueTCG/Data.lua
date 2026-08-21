@@ -241,6 +241,12 @@ end
 -- Misc constants
 ---------------------------------------------------------------------------
 
+-- Celebration soundkit ids with no SOUNDKIT constant: the level-up
+-- fanfare and the PvP-queue war horn. Alarm sounds (RAID_WARNING) are
+-- reserved for actual warnings - a good pull should sound GOOD.
+TT.SOUND_FANFARE = 888    -- level-up ding
+TT.SOUND_WARHORN = 8459   -- battleground queue horn
+
 TT.QUESTION_MARK = "Interface\\Icons\\INV_Misc_QuestionMark"
 TT.CARD_BACK_ICON = "Interface\\Icons\\INV_Misc_Ticket_Tarot_Stack_01"  -- minimap/tab icon
 TT.CARD_BACK_TEX = "Interface\\AddOns\\TavernLeagueTCG\\art\\cardback"    -- the card back art
