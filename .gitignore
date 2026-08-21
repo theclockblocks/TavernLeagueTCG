@@ -1,6 +1,9 @@
 # Local dev convenience (machine-specific game paths)
 deploy_tavernleaguetcg.bat
 
+# Local-only dev commands (the .toc lists it; the game skips missing files)
+TavernLeagueTCG/Dev.lua
+
 # Pool-builder working files (regenerate: node tools/fetch_dataset.js)
 tools/cache/
 tools/report_included.csv

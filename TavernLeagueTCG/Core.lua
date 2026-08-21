@@ -482,6 +482,7 @@ local function BossBounty(amount, label)
     label and (" - " .. label) or "", daily))
   TT.Refresh()
 end
+TT.BossBounty = BossBounty  -- local Dev.lua uses this for test bounties
 
 function TT.OnCombatLogEvent()
   local _, subevent, _, _, _, _, _, destGUID = CombatLogGetCurrentEventInfo()
@@ -1036,34 +1037,6 @@ SlashCmdList.TAVERNLEAGUETCG = function(msg)
     if TT.BuyPack() and TT.UI_ShowPackOverlay then TT.UI_ShowPackOverlay() end
   elseif cmd == "simulate" then
     TT.SimulatePacks(rest)
-  -- Dev/test commands (command-only, never in the UI). Every grant is
-  -- written to the run's event log so the audit trail stays honest.
-  elseif cmd == "grant" then
-    local n = math.max(1, math.min(tonumber(rest) or 2500, 10000000))
-    TT.AddCredits(n, "xp")
-    TT.LogEvent("event", ("DEV: %s granted themselves %s credits."):format(
-      UnitName("player"), TT.FormatNumber(n)))
-    TT.Msg(("Dev: +%s credits."):format(TT.FormatNumber(n)))
-  elseif cmd == "grantpacks" then
-    local n = math.max(1, math.min(tonumber(rest) or 1, 1000))
-    local p = TT.Profile()
-    p.freePacks = (p.freePacks or 0) + n
-    TT.LogEvent("event", ("DEV: %s granted themselves %d free pack(s)."):format(
-      UnitName("player"), n))
-    TT.Msg(("Dev: +%d free pack(s) (%d banked)."):format(n, p.freePacks))
-    TT.Refresh()
-  elseif cmd == "testboss" then
-    TT.LogEvent("event", ("DEV: %s triggered a test boss bounty."):format(UnitName("player")))
-    BossBounty(TT.ECON.dungeonBossBounty, "test boss (dev)")
-  elseif cmd == "testgod" then
-    TT.forceGodPack = true
-    TT.Msg("Dev: the next pack you open will be a GOD PACK.")
-  elseif cmd == "dev" then
-    TT.Msg("Dev commands (all grants are recorded in the event log):")
-    TT.Msg("  grant N - credits  |  grantpacks N - free packs")
-    TT.Msg("  testboss - fire a boss bounty (tests the daily pack too)")
-    TT.Msg("  testgod - force the next pack to be a god pack")
-    TT.Msg("  simulate N - roll N packs and print the rarity histogram")
   elseif cmd == "retire" then
     local name, confirm = rest:match("^(%S+)%s+(%S+)$")
     if name and confirm == "CONFIRM" then
@@ -1094,7 +1067,9 @@ SlashCmdList.TAVERNLEAGUETCG = function(msg)
   elseif cmd == "reset" then
     StaticPopup_Show("TAVERNLEAGUETCG_RESET")
   else
-    TT.Msg("Commands: status, roster, open, simulate N, retire <name> CONFIRM, unlock CONFIRM, unhard CONFIRM, minimap, reset, dev")
+    -- local test builds may carry a gitignored Dev.lua with extra commands
+    if TT.DevCommand and TT.DevCommand(cmd, rest) then return end
+    TT.Msg("Commands: status, roster, open, simulate N, retire <name> CONFIRM, unlock CONFIRM, unhard CONFIRM, minimap, reset")
   end
 end
 

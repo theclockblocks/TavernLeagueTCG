@@ -45,9 +45,14 @@ is in `TT.ECON` (Data.lua). `CardPool.lua` and `art/` are generated -
 never edit them by hand.
 
 To test in-game: copy `deploy.bat.example` to `deploy_tavernleaguetcg.bat`
-(gitignored), fix the game paths, run it, `/reload`. `/tltcg dev` lists
-the test commands (grant packs/credits, force a god pack, fake a boss
-bounty) - dev grants are recorded in the run's event log by design.
+(gitignored), fix the game paths, run it, `/reload`.
+
+Test commands (grant packs/credits, force a god pack, fake a boss bounty)
+deliberately don't ship: they live in `TavernLeagueTCG/Dev.lua`, which is
+gitignored - the .toc lists it and the game skips missing files. Define
+`TT.DevCommand(cmd, rest)` there (return `true` for handled commands) and
+Core's slash handler picks it up. Log anything you grant with
+`TT.LogEvent` so the run's audit trail stays honest.
 
 ## PRs
 
