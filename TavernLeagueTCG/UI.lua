@@ -823,8 +823,18 @@ local function RefreshBinder()
   ui.bucketFilterBtn:SetText(TT.SLOT_BUCKETS[bucketIdx].label)
 
   local offset = (b.page - 1) * BINDER_PAGE_SIZE
-  local now = time()
   local pageRows = {}
+
+  -- NEW badges last until the player has actually viewed the card: when
+  -- the page/filters change, everything shown on the previous view is
+  -- marked seen (the binder's OnHide does the same for the current page)
+  local sig = table.concat({ b.page, b.own, b.rarity, b.bucket, b.search }, "|")
+  if ui.freshSig and ui.freshSig ~= sig then
+    for k in pairs(ui.freshKeys or {}) do p.fresh[k] = nil end
+    ui.freshKeys = {}
+  end
+  ui.freshSig = sig
+  ui.freshKeys = ui.freshKeys or {}
   for i = 1, BINDER_PAGE_SIZE do
     local cell = ui.binderCells[i]
     local row = list[offset + i]
@@ -858,8 +868,9 @@ local function RefreshBinder()
         cell.foilGlow:SetAlpha(0)
         cell.aura:SetVertexColor(1, 0.85, 0.3, 0)
       end
-      local seen = p.firstSeen[key]
-      cell.newTag:SetShown(ownedCard and seen ~= nil and (now - seen) < 86400)
+      local isFresh = ownedCard and p.fresh[key] == true
+      cell.newTag:SetShown(isFresh)
+      if isFresh then ui.freshKeys[key] = true end
       cell:Show()
       pageRows[#pageRows + 1] = row
     else
@@ -965,7 +976,7 @@ local function BuildBinderPage(page)
   end)
   ui.binderPrev:SetPoint("RIGHT", ui.binderPageText, "LEFT", -8, 0)
 
-  -- 4x3 card grid
+  -- 6x2 card grid
   local GAP = 8
   for i = 1, BINDER_PAGE_SIZE do
     local col = (i - 1) % BINDER_COLS
@@ -974,6 +985,15 @@ local function BuildBinderPage(page)
     cell:SetPoint("TOPLEFT", 14 + col * (116 + GAP), -62 - row * (200 + GAP))
     ui.binderCells[i] = cell
   end
+
+  -- closing the binder (or switching tabs) marks the viewed page as seen
+  page:SetScript("OnHide", function()
+    if not TT.db then return end
+    local prof = TT.Profile()
+    for k in pairs(ui.freshKeys or {}) do prof.fresh[k] = nil end
+    ui.freshKeys = {}
+    ui.freshSig = nil
+  end)
 end
 
 ---------------------------------------------------------------------------

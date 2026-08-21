@@ -173,6 +173,7 @@ local function applyTrade()
       if (col.n or 0) == 0 and (col.f or 0) == 0 then
         p.collection[e.k] = nil
         p.firstSeen[e.k] = nil
+        p.fresh[e.k] = nil
       end
       TT.LedgerRemove(p, me, e.k, e.f, 1)
     end
@@ -183,6 +184,7 @@ local function applyTrade()
     local col = p.collection[e.k] or { n = 0, f = 0 }
     if (col.n + col.f) == 0 then
       p.firstSeen[e.k] = time()
+      p.fresh[e.k] = true
     end
     if e.f then col.f = col.f + 1 else col.n = col.n + 1 end
     p.collection[e.k] = col

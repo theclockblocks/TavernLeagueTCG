@@ -17,6 +17,7 @@ local profileDefaults = {
     bosses = 0, honor = 0, sold = 0, trades = 0 },
   collection = {},      -- [cardKey] = { n = count, f = foilCount }
   firstSeen = {},       -- [cardKey] = time() of first pull
+  fresh = {},           -- [cardKey] = true until viewed in the binder (NEW badge)
   pendingPack = nil,    -- set by RollPack, cleared by FinishPack
   pity = 0,             -- packs since the last epic+ pull
   lockedMode = false,
@@ -303,6 +304,7 @@ function TT.RevokeContributions(charName, why)
         if col.n == 0 and col.f == 0 then
           p.collection[key] = nil
           p.firstSeen[key] = nil
+          p.fresh[key] = nil
         end
       end
     end
@@ -693,6 +695,7 @@ function TT.FinishPack()
     if (col.n + col.f) == 0 then
       newCount = newCount + 1
       p.firstSeen[c.k] = time()
+      p.fresh[c.k] = true
     end
     if c.f then col.f = col.f + 1 else col.n = col.n + 1 end
     p.collection[c.k] = col
@@ -790,6 +793,7 @@ function TT.DisableHardmode()
     local col = rp.collection[key] or { n = 0, f = 0 }
     if (col.n + col.f) == 0 then
       rp.firstSeen[key] = hp.firstSeen[key] or time()
+      rp.fresh[key] = true
     end
     col.n = col.n + (c.n or 0)
     col.f = col.f + (c.f or 0)
