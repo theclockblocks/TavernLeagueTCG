@@ -157,6 +157,9 @@ function TT.BuildPoolIndex()
       local byTier = TT.poolByType[TT.PackTypeOf(row)]
       local bucket = byTier[row.r] or byTier[1]
       bucket[#bucket + 1] = row
+      -- wild packs draw from the entire pool
+      local wild = TT.poolByType.wild[row.r] or TT.poolByType.wild[1]
+      wild[#wild + 1] = row
       TT.poolCount = TT.poolCount + 1
     end
   end
@@ -729,7 +732,7 @@ function TT.SimulatePacks(args)
   count = math.min(tonumber(count) or 100, 100000)
   ptype = (ptype ~= "" and ptype) or "equipment"
   if not TT.poolByType[ptype] then
-    TT.Msg("Usage: simulate N [equipment|goods|creatures]")
+    TT.Msg("Usage: simulate N [equipment|goods|creatures|wild]")
     return
   end
   local hist, foils, gods = {}, 0, 0

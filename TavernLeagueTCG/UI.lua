@@ -338,7 +338,16 @@ local PACK_TINTS = {
   { 0.55, 0.15, 0.15 },
   { 0.15, 0.25, 0.55 },
   { 0.15, 0.45, 0.20 },
+  { 0.40, 0.18, 0.50 },
 }
+
+-- x-offset from stage center for pack choice i (used by layout + bobbing)
+local function PackChoiceX(i)
+  local W, GAP = 140, 32
+  local n = #TT.PACK_TYPES
+  local totalW = n * W + (n - 1) * GAP
+  return -totalW / 2 + (i - 1) * (W + GAP)
+end
 
 local function CreateSealedPack(parent, index)
   local ptype = TT.PACK_TYPES[index]
@@ -686,11 +695,9 @@ local function BuildSelectStage(parent)
   local title = CreateHeader(stage, "Pick your pack - the choice decides what's inside")
   title:SetPoint("TOP", 0, -30)
 
-  local W, GAP = 140, 40
-  local totalW = 3 * W + 2 * GAP
-  for i = 1, 3 do
+  for i = 1, #TT.PACK_TYPES do
     local p = CreateSealedPack(stage, i)
-    p:SetPoint("TOPLEFT", stage, "TOP", -totalW / 2 + (i - 1) * (W + GAP), -90)
+    p:SetPoint("TOPLEFT", stage, "TOP", PackChoiceX(i), -90)
     p:SetScript("OnClick", function(self)
       if not ui.selectLockout then OnPackChosen(self) end
     end)
@@ -716,11 +723,8 @@ local function EnterSelectStage()
     if not ui.selectStage:IsVisible() then StopLoop("packbob"); return end
     for i, p in ipairs(ui.packChoices) do
       local off = 6 * math.sin(now * 1.4 + i * 2.1)
-      local W, GAP = 140, 40
-      local totalW = 3 * W + 2 * GAP
       p:ClearAllPoints()
-      p:SetPoint("TOPLEFT", ui.selectStage, "TOP",
-        -totalW / 2 + (i - 1) * (W + GAP), -90 + off)
+      p:SetPoint("TOPLEFT", ui.selectStage, "TOP", PackChoiceX(i), -90 + off)
     end
   end)
 end

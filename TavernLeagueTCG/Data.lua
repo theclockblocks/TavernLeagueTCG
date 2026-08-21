@@ -219,15 +219,17 @@ TT.SLOT_BUCKETS = {
   { key = "creature", label = "Creatures" },
 }
 
--- Pack types: buying a pack presents these three; the player's pick
--- decides which pool the contents roll from.
+-- Pack types: buying a pack presents these; the player's pick decides
+-- which pool the contents roll from. "wild" draws from the entire pool.
 TT.PACK_TYPES = {
   { key = "equipment", label = "Equipment",   sub = "weapons & armor" },
   { key = "goods",     label = "Trade Goods", sub = "materials & supplies" },
   { key = "creatures", label = "Creatures",   sub = "NPCs, mobs & bosses" },
+  { key = "wild",      label = "Wild",        sub = "a bit of everything" },
 }
 
--- Which pack type a pool row belongs to.
+-- Which pack type a pool row belongs to. Never returns "wild" - every row
+-- is ALSO indexed under wild at BuildPoolIndex time.
 function TT.PackTypeOf(row)
   local bucket = TT.SlotBucket(row)
   if bucket == "creature" then return "creatures" end
@@ -261,8 +263,8 @@ TT.LAYOUT = {
   sheenBase = 0.20, sheenSwing = 0.14,   -- face sheen alpha = base + swing*sin
   auraBase = 0.55, auraSwing = 0.30,     -- aura alpha
   auraScale = 1.4,          -- aura size relative to the card
-  -- pack selection screen tints (three packs: warm / cool / green)
-  packArtTints = { { 1, 0.87, 0.87 }, { 0.87, 0.92, 1 }, { 0.87, 1, 0.9 } },
+  -- pack selection screen tints (warm / cool / green / wild purple)
+  packArtTints = { { 1, 0.87, 0.87 }, { 0.87, 0.92, 1 }, { 0.87, 1, 0.9 }, { 0.96, 0.87, 1 } },
 }
 
 -- Camera framing for the 3D creature model in the card window. Oversized
