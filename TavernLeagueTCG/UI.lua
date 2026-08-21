@@ -202,7 +202,8 @@ local function CardModel_ScheduleRetry(m)
       CardModel_Loaded(m)
       return
     end
-    if m.retries >= 2 then return end
+    -- unseen NPCs need a server creature query; give it a real window
+    if m.retries >= 8 then return end
     m.retries = m.retries + 1
     m:ClearModel()
     m:SetCreature(id)
@@ -595,6 +596,12 @@ local function FlipCard(c, idx, cardData)
       c:SetWidth(w)
       ui.revealLockout = false
 
+      -- a model that loaded mid-flip framed its camera on a 2px-wide
+      -- frame; re-frame now that the card is full size
+      if c.model and c.model:IsShown() and c.model.loaded then
+        CardModel_Frame(c.model)
+      end
+
       local tier = CardRarity(cardData.k)
       local pack = TT.Profile().pendingPack
       if pack and pack.god and idx == 1 then
@@ -680,10 +687,39 @@ local function BuildRevealStage(parent)
   ui.doneBtn:Hide()
 end
 
+-- Pre-warm the pack's creature models: invisible 1px model frames issue
+-- SetCreature as soon as the reveal screen opens, so the client's creature
+-- query has landed by the time the player flips the card. Without this,
+-- a never-seen NPC often misses its art at the reveal moment (the binder
+-- recovers via its refresh loop; the reveal is one-shot).
+local prefetchModels = {}
+
+local function PrefetchCreatureModels(pack)
+  local n = 0
+  for _, cd in ipairs(pack.cards) do
+    local row = TT.cardIndex and TT.cardIndex[cd.k]
+    if row and (row.kind or "item") == "npc" then
+      n = n + 1
+      local m = prefetchModels[n]
+      if not m then
+        m = CreateFrame("PlayerModel", nil, ui.revealStage)
+        m:SetSize(1, 1)
+        m:SetPoint("BOTTOMLEFT")
+        m:SetAlpha(0)
+        prefetchModels[n] = m
+      end
+      m:Show()
+      m:SetCreature(row.i)
+    end
+  end
+  for i = n + 1, #prefetchModels do prefetchModels[i]:Hide() end
+end
+
 local function EnterRevealStage()
   OverlayShowStage("reveal")
   local pack = TT.Profile().pendingPack
   if not pack or not pack.cards then overlay:Hide(); return end
+  PrefetchCreatureModels(pack)
   for i, c in ipairs(ui.revealCards) do
     StopLoop("foil" .. tostring(c))
     if i <= pack.revealed then
