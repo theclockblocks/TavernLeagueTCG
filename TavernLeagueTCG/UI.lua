@@ -153,7 +153,36 @@ local function CardModel_Frame(m)
   elseif m.SetCamera then
     m:SetCamera(0)
   end
-  m:SetFacing(TT.MODEL.facing)
+  m.facing = TT.MODEL.facing
+  m:SetFacing(m.facing)
+end
+
+-- Drag-to-rotate: the model captures the mouse, so plain clicks and hover
+-- are forwarded to the card underneath - only real drags spin the model.
+local function CardModel_DragStart(m)
+  m.dragging = true
+  m.dragX = GetCursorPosition()
+  m:SetScript("OnUpdate", function(self)
+    local x = GetCursorPosition()
+    self.facing = (self.facing or TT.MODEL.facing)
+      + (x - self.dragX) * TT.MODEL.dragSpeed
+    self.dragX = x
+    self:SetFacing(self.facing)
+  end)
+end
+
+local function CardModel_DragStop(m)
+  m.dragging = false
+  m.dragEnded = GetTime()
+  m:SetScript("OnUpdate", nil)
+end
+
+local function CardModel_MouseUp(m, button)
+  -- ignore the release that ends a rotation drag, whichever order the
+  -- client fires OnDragStop/OnMouseUp in
+  if m.dragging or (m.dragEnded and GetTime() - m.dragEnded < 0.05) then return end
+  local onClick = m.cell:GetScript("OnClick")
+  if onClick then onClick(m.cell, button) end
 end
 
 local function CardModel_Loaded(m)
@@ -198,6 +227,22 @@ local function EnsureCardModel(c)
   if m:HasScript("OnModelLoaded") then
     m:SetScript("OnModelLoaded", CardModel_Loaded)
   end
+
+  -- spin the creature by dragging; clicks and hover fall through to the card
+  m:EnableMouse(true)
+  m:RegisterForDrag("LeftButton")
+  m:SetScript("OnDragStart", CardModel_DragStart)
+  m:SetScript("OnDragStop", CardModel_DragStop)
+  m:SetScript("OnMouseUp", CardModel_MouseUp)
+  m:SetScript("OnEnter", function(self)
+    local onEnter = self.cell:GetScript("OnEnter")
+    if onEnter then onEnter(self.cell) end
+  end)
+  m:SetScript("OnLeave", function(self)
+    local onLeave = self.cell:GetScript("OnLeave")
+    if onLeave then onLeave(self.cell) end
+  end)
+
   m:Hide()
   c.model = m
   return m
@@ -914,6 +959,9 @@ local function CreateBinderCell(parent)
       local r, g, b = TT.RarityColor(row.r)
       GameTooltip:SetText(row.n or "?", r, g, b)
       GameTooltip:AddLine(TT.NPC_SET_LABELS[row.s] or "Creature", 0.8, 0.8, 0.8)
+      if self.model and self.model:IsShown() then
+        GameTooltip:AddLine("Drag the art to rotate", 0.5, 0.5, 0.5)
+      end
     end
     if TT.Trade_IsOpen and TT.Trade_IsOpen() then
       GameTooltip:AddLine("Click: add to trade offer (Ctrl: foil copy)", 0.3, 1, 0.3)

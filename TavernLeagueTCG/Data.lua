@@ -274,6 +274,7 @@ TT.MODEL = {
   portraitZoom = 0.55,  -- 0 = full body, 1 = face close-up (when the client supports it)
   facing       = 0.45,  -- radians of turn; a slight three-quarter angle
   bg           = { 0.04, 0.04, 0.07, 1 },  -- backdrop behind the model
+  dragSpeed    = 0.012, -- radians per dragged pixel when spinning a card model
 }
 
 -- Computes pixel positions for a card face of a given size: where the item
