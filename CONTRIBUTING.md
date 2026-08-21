@@ -46,8 +46,8 @@ never edit them by hand.
 
 To test in-game: copy `deploy.bat.example` to `deploy_tavernleaguetcg.bat`
 (gitignored), fix the game paths, run it, `/reload`. `/tltcg dev` lists
-the test commands (grant packs/credits/shards, force a god pack, fake a
-boss bounty) - dev grants are recorded in the run's event log by design.
+the test commands (grant packs/credits, force a god pack, fake a boss
+bounty) - dev grants are recorded in the run's event log by design.
 
 ## PRs
 

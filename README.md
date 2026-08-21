@@ -47,7 +47,7 @@ addon folder. TBC-only cards are hidden on Era clients.
 - Pack contents are rolled and saved the moment you pay - relogging
   mid-open resumes the exact same pack. No reroll tricks.
 
-## Endgame: bounties, honor, dusting & crafting
+## Endgame: bounties, honor, and selling dupes
 
 Leveling dries up at cap, so max-level play has its own faucets:
 
@@ -56,12 +56,10 @@ Leveling dries up at cap, so max-level play has its own faucets:
   8-12 packs. The **first bounty boss each day banks a free pack**.
 - **Honorable kills** pay 35c each - the game's own honor rules decide
   what counts, so grey-level farming pays nothing.
-- **Dusting & crafting**: right-click a card in the binder to dust a
-  *spare* copy into shards (5/20/100/400/1,600 by rarity; Ctrl-right-click
-  dusts a foil for 4x; your last copy can never be dusted). Right-click a
-  missing card to craft it for shards (20/80/400/1,600/8,000). Every
-  duplicate pull still moves the collection forward - that's the
-  completion engine.
+- **Sell your dupes**: right-click a card in the binder to sell a *spare*
+  copy back for credits (15/50/200/800/4,000 by rarity; Ctrl-right-click
+  sells a foil for 4x; your last copy can never be sold). Every duplicate
+  pull funds the next pack.
 
 ## Trading
 
@@ -107,16 +105,16 @@ hatch - is recorded in the run's event log.
 
 `/tcg`, `/tltcg`, `/tavernleague` - open the window
 
-- `status` - credits, packs, shards, pity, collection counts
+- `status` - credits, packs, pity, collection counts
 - `roster` - per-character contributions for this run
 - `simulate N` - roll N packs (no cost) and print the rarity histogram
 - `retire <Name> CONFIRM` - revoke a deleted character's pulled cards
 - `unlock CONFIRM` / `unhard CONFIRM` - leave Locked mode / Hardmode (logged)
 - `minimap` - toggle the minimap button
 - `reset` - wipe this profile (confirm dialog)
-- `dev` - lists the dev/test commands (`grant`, `grantpacks`, `grantshards`,
-  `testboss`, `testgod`). Command-only, and every grant is permanently
-  recorded in the run's event log - test freely, but the receipts show.
+- `dev` - lists the dev/test commands (`grant`, `grantpacks`, `testboss`,
+  `testgod`). Command-only, and every grant is permanently recorded in
+  the run's event log - test freely, but the receipts show.
 
 ## Contributing
 

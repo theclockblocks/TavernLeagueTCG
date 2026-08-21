@@ -736,37 +736,30 @@ local function CreateBinderCell(parent)
       end
       return
     end
-    -- right-click: dust a spare (Ctrl for foil) or craft a missing card
+    -- right-click: sell a spare copy back for credits (Ctrl for foil)
     local key = self.cardKey
     local row = TT.cardIndex[key]
     if not row then return end
     local p = TT.Profile()
     local col = p.collection[key]
     local total = col and ((col.n or 0) + (col.f or 0)) or 0
-    if total == 0 then
-      local cost = TT.ECON.craftCost[row.r]
-      TT._craftKey = key
-      StaticPopup_Show("TAVERNLEAGUETCG_CRAFT",
-        ("Craft |cffffd100%s|r (%s)?\n\nCost: %s shards - you have %s."):format(
-          row.n or key, TT.RarityLabel(row.r), TT.FormatNumber(cost),
-          TT.FormatNumber(p.shards or 0)))
-    elseif total > 1 then
+    if total > 1 then
       local foil = IsControlKeyDown()
       local field = foil and "f" or "n"
       if (col[field] or 0) < 1 then
-        TT.Msg(foil and "No foil copy to dust (Ctrl dusts foils)."
-          or "Only foil copies spare - Ctrl-right-click to dust a foil.")
+        TT.Msg(foil and "No foil copy to sell (Ctrl sells foils)."
+          or "Only foil copies spare - Ctrl-right-click to sell a foil.")
         return
       end
-      local shards = TT.ECON.dustValue[row.r] * (foil and TT.ECON.foilDustMult or 1)
-      TT._dustKey = key
-      TT._dustFoil = foil
-      StaticPopup_Show("TAVERNLEAGUETCG_DUST",
-        ("Dust a %s|cffffd100%s|r spare?\n\nYields %s shards. You keep %d cop%s."):format(
-          foil and "FOIL " or "", row.n or key, TT.FormatNumber(shards),
+      local credits = TT.ECON.sellValue[row.r] * (foil and TT.ECON.foilSellMult or 1)
+      TT._sellKey = key
+      TT._sellFoil = foil
+      StaticPopup_Show("TAVERNLEAGUETCG_SELL",
+        ("Sell a %s|cffffd100%s|r spare?\n\nPays %s credits. You keep %d cop%s."):format(
+          foil and "FOIL " or "", row.n or key, TT.FormatNumber(credits),
           total - 1, total - 1 == 1 and "y" or "ies"))
-    else
-      TT.Msg("That's your only copy - dusting always keeps at least one.")
+    elseif total == 1 then
+      TT.Msg("That's your only copy - selling always keeps at least one.")
     end
   end)
   c:SetScript("OnEnter", function(self)
@@ -791,12 +784,9 @@ local function CreateBinderCell(parent)
     if hintRow then
       local col = TT.Profile().collection["item:" .. self.itemId]
       local total = col and ((col.n or 0) + (col.f or 0)) or 0
-      if total == 0 then
-        GameTooltip:AddLine(("Right-click: craft for %s shards"):format(
-          TT.FormatNumber(TT.ECON.craftCost[hintRow.r])), 0.6, 0.7, 1)
-      elseif total > 1 then
-        GameTooltip:AddLine(("Right-click: dust a spare for %s shards (Ctrl: foil, x%d)"):format(
-          TT.FormatNumber(TT.ECON.dustValue[hintRow.r]), TT.ECON.foilDustMult), 0.6, 0.7, 1)
+      if total > 1 then
+        GameTooltip:AddLine(("Right-click: sell a spare for %s credits (Ctrl: foil, x%d)"):format(
+          TT.FormatNumber(TT.ECON.sellValue[hintRow.r]), TT.ECON.foilSellMult), 0.6, 0.7, 1)
       end
     end
     GameTooltip:Show()
@@ -818,9 +808,8 @@ local function RefreshBinder()
   if b.page < 1 then b.page = 1 end
 
   local owned, foils = TT.OwnedCounts()
-  ui.binderHeader:SetText(("Owned %s / %s   (foil %s)   |cffaabbffShards: %s|r"):format(
-    TT.FormatNumber(owned), TT.FormatNumber(TT.poolCount or 0), TT.FormatNumber(foils),
-    TT.FormatNumber(TT.Profile().shards or 0)))
+  ui.binderHeader:SetText(("Owned %s / %s   (foil %s)"):format(
+    TT.FormatNumber(owned), TT.FormatNumber(TT.poolCount or 0), TT.FormatNumber(foils)))
   ui.binderPageText:SetText(("Page %d / %d"):format(b.page, pages))
   ui.binderPrev:SetEnabled(b.page > 1)
   ui.binderNext:SetEnabled(b.page < pages)

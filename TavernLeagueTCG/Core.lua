@@ -13,9 +13,8 @@ local ADDON, TT = ...
 local profileDefaults = {
   credits = 0,
   freePacks = 0,        -- banked packs from level-ups; consumed before credits
-  shards = 0,           -- from dusting spare cards; spent on crafting
   stats = { xp = 0, kills = 0, quests = 0, levels = 0, packs = 0, gods = 0,
-    bosses = 0, honor = 0, dusted = 0, crafted = 0, trades = 0 },
+    bosses = 0, honor = 0, sold = 0, trades = 0 },
   collection = {},      -- [cardKey] = { n = count, f = foilCount }
   firstSeen = {},       -- [cardKey] = time() of first pull
   pendingPack = nil,    -- set by RollPack, cleared by FinishPack
@@ -268,7 +267,7 @@ function TT.AddContribution(charName, key, foil)
 end
 
 -- Attribution follows physical cards: when copies leave the collection
--- (trade, dust), reduce the acting character's ledger first, then anyone's.
+-- (trade, sell), reduce the acting character's ledger first, then anyone's.
 function TT.LedgerRemove(p, charName, key, foil, amount)
   local field = foil and "f" or "n"
   local function take(led, n)
@@ -536,58 +535,33 @@ function TT.OnPvpKillsChanged()
 end
 
 ---------------------------------------------------------------------------
--- Dusting & crafting: spare copies become shards, shards become the exact
--- card you're missing. The completion engine at endgame - every duplicate
--- pull still moves the collection forward.
+-- Selling duplicates: a spare copy sells back for credits, so every
+-- duplicate pull still funds the next pack. The last copy is protected.
 ---------------------------------------------------------------------------
 
-function TT.DustCard(key, foil)
+function TT.SellCard(key, foil)
   local p = TT.Profile()
   local row = TT.cardIndex[key]
   local col = p.collection[key]
   if not row or not col then return end
   local field = foil and "f" or "n"
   if (col[field] or 0) < 1 then
-    TT.Msg(foil and "No foil copy of that card to dust." or "No normal copy of that card to dust.")
+    TT.Msg(foil and "No foil copy of that card to sell." or "No normal copy of that card to sell.")
     return
   end
   if ((col.n or 0) + (col.f or 0)) <= 1 then
-    TT.Msg("That's your last copy - dusting always keeps at least one.")
+    TT.Msg("That's your last copy - selling always keeps at least one.")
     return
   end
   col[field] = col[field] - 1
   TT.LedgerRemove(p, UnitName("player"), key, foil, 1)
-  local shards = TT.ECON.dustValue[row.r] * (foil and TT.ECON.foilDustMult or 1)
-  p.shards = (p.shards or 0) + shards
-  p.stats.dusted = (p.stats.dusted or 0) + 1
+  local credits = TT.ECON.sellValue[row.r] * (foil and TT.ECON.foilSellMult or 1)
+  p.credits = p.credits + credits
+  p.stats.sold = (p.stats.sold or 0) + 1
   TT.PlaySoundKit("IG_MAINMENU_OPTION_CHECKBOX_ON")
-  TT.Msg(("Dusted %s%s: +%d shards (%s total)."):format(
-    foil and "foil " or "", row.n or key, shards, TT.FormatNumber(p.shards)))
-  TT.Refresh()
-end
-
-function TT.CraftCard(key)
-  local p = TT.Profile()
-  local row = TT.cardIndex[key]
-  if not row then return end
-  local cost = TT.ECON.craftCost[row.r]
-  if (p.shards or 0) < cost then
-    TT.Msg(("Not enough shards: %s costs %s, you have %s."):format(
-      row.n or key, TT.FormatNumber(cost), TT.FormatNumber(p.shards or 0)))
-    return
-  end
-  p.shards = p.shards - cost
-  local col = p.collection[key] or { n = 0, f = 0 }
-  if (col.n + col.f) == 0 then
-    p.firstSeen[key] = time()
-  end
-  col.n = col.n + 1
-  p.collection[key] = col
-  TT.AddContribution(UnitName("player"), key, false)
-  p.stats.crafted = (p.stats.crafted or 0) + 1
-  TT.PlaySoundKit("IG_QUEST_LOG_OPEN")
-  TT.Msg(("|cff00ff88Crafted %s|r for %s shards (%s left)."):format(
-    row.n or key, TT.FormatNumber(cost), TT.FormatNumber(p.shards)))
+  TT.Msg(("Sold %s%s: +%s credits (%s total)."):format(
+    foil and "foil " or "", row.n or key, TT.FormatNumber(credits),
+    TT.FormatNumber(p.credits)))
   TT.Refresh()
 end
 
@@ -1045,9 +1019,8 @@ SlashCmdList.TAVERNLEAGUETCG = function(msg)
     TT.Msg(("Credits: %s  |  Free packs: %d  |  Packs opened: %d (god: %d)  |  Trades: %d  |  Pity: %d/%d"):format(
       TT.FormatNumber(p.credits), p.freePacks or 0, p.stats.packs or 0, p.stats.gods or 0,
       p.stats.trades or 0, p.pity, TT.ECON.pityEpic))
-    TT.Msg(("Collection: %d/%d cards (%d foil)  |  Shards: %s (dusted %d, crafted %d)"):format(
-      owned, TT.poolCount or 0, foils, TT.FormatNumber(p.shards or 0),
-      p.stats.dusted or 0, p.stats.crafted or 0))
+    TT.Msg(("Collection: %d/%d cards (%d foil)  |  Dupes sold: %d"):format(
+      owned, TT.poolCount or 0, foils, p.stats.sold or 0))
     TT.Msg(("Earned - xp: %s, kills: %s, quests: %s, levels: %s, skills: %s, bosses: %s, honor: %s"):format(
       TT.FormatNumber(p.stats.xp or 0), TT.FormatNumber(p.stats.kills or 0),
       TT.FormatNumber(p.stats.quests or 0), TT.FormatNumber(p.stats.levels or 0),
@@ -1075,14 +1048,6 @@ SlashCmdList.TAVERNLEAGUETCG = function(msg)
       UnitName("player"), n))
     TT.Msg(("Dev: +%d free pack(s) (%d banked)."):format(n, p.freePacks))
     TT.Refresh()
-  elseif cmd == "grantshards" then
-    local n = math.max(1, math.min(tonumber(rest) or 100, 1000000))
-    local p = TT.Profile()
-    p.shards = (p.shards or 0) + n
-    TT.LogEvent("event", ("DEV: %s granted themselves %s shards."):format(
-      UnitName("player"), TT.FormatNumber(n)))
-    TT.Msg(("Dev: +%s shards (%s total)."):format(TT.FormatNumber(n), TT.FormatNumber(p.shards)))
-    TT.Refresh()
   elseif cmd == "testboss" then
     TT.LogEvent("event", ("DEV: %s triggered a test boss bounty."):format(UnitName("player")))
     BossBounty(TT.ECON.dungeonBossBounty, "test boss (dev)")
@@ -1091,7 +1056,7 @@ SlashCmdList.TAVERNLEAGUETCG = function(msg)
     TT.Msg("Dev: the next pack you open will be a GOD PACK.")
   elseif cmd == "dev" then
     TT.Msg("Dev commands (all grants are recorded in the event log):")
-    TT.Msg("  grant N - credits  |  grantpacks N - free packs  |  grantshards N - shards")
+    TT.Msg("  grant N - credits  |  grantpacks N - free packs")
     TT.Msg("  testboss - fire a boss bounty (tests the daily pack too)")
     TT.Msg("  testgod - force the next pack to be a god pack")
     TT.Msg("  simulate N - roll N packs and print the rarity histogram")
@@ -1151,32 +1116,17 @@ StaticPopupDialogs.TAVERNLEAGUETCG_LOCKMODE = {
   preferredIndex = 3,
 }
 
--- Dust/craft confirmations: UI stores the pending card, popup text is
--- fully formatted by the caller and passed as the single %s.
-StaticPopupDialogs.TAVERNLEAGUETCG_DUST = {
+-- Sell confirmation: UI stores the pending card, popup text is fully
+-- formatted by the caller and passed as the single %s.
+StaticPopupDialogs.TAVERNLEAGUETCG_SELL = {
   text = "%s",
-  button1 = "Dust it",
+  button1 = "Sell it",
   button2 = CANCEL,
   OnAccept = function()
-    if TT._dustKey then TT.DustCard(TT._dustKey, TT._dustFoil) end
-    TT._dustKey = nil
+    if TT._sellKey then TT.SellCard(TT._sellKey, TT._sellFoil) end
+    TT._sellKey = nil
   end,
-  OnCancel = function() TT._dustKey = nil end,
-  timeout = 0,
-  whileDead = true,
-  hideOnEscape = true,
-  preferredIndex = 3,
-}
-
-StaticPopupDialogs.TAVERNLEAGUETCG_CRAFT = {
-  text = "%s",
-  button1 = "Craft it",
-  button2 = CANCEL,
-  OnAccept = function()
-    if TT._craftKey then TT.CraftCard(TT._craftKey) end
-    TT._craftKey = nil
-  end,
-  OnCancel = function() TT._craftKey = nil end,
+  OnCancel = function() TT._sellKey = nil end,
   timeout = 0,
   whileDead = true,
   hideOnEscape = true,

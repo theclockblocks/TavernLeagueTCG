@@ -46,10 +46,10 @@ TT.ECON = {
   raidBossBounty    = 2500,   -- any ?? world/raid boss you fight
   honorKill         = 35,     -- per honorable kill (the game's own honor rules gate this)
 
-  -- dusting & crafting (shards): dust a SPARE copy, craft a missing card
-  dustValue    = { 5, 20, 100, 400, 1600 },   -- shards per dusted spare, by tier
-  craftCost    = { 20, 80, 400, 1600, 8000 }, -- shards to craft a card, by tier
-  foilDustMult = 4,                            -- foil spares dust for 4x
+  -- selling duplicates: a SPARE copy sells back for credits (last copy
+  -- can never be sold)
+  sellValue    = { 15, 50, 200, 800, 4000 },  -- credits per sold spare, by tier
+  foilSellMult = 4,                           -- foil spares sell for 4x
 
   -- pack odds: per-slot rarity weights out of 1000
   slotOdds  = { 650, 250, 80, 20, 0 },     -- slots 1-7 (common..legendary)
