@@ -357,14 +357,25 @@ function TT.IsProfessionLocked(profName)
   if key == false then return true end
   return not TT.IsUnlocked(key)
 end
--- Shut the window on the next frame: closing one from inside its own SHOW
--- event can catch the Blizzard UI mid-open.
-local function BlockTradeWindow(profName, close)
+
+-- Shut the window: end the interaction AND hide the frame, on this frame
+-- and again on the next. Closing from inside a SHOW event can catch the
+-- Blizzard UI mid-open, which leaves the window standing.
+local function ShutTradeWindow(close, frame)
+  local function shut()
+    if close then close() end
+    if frame and frame:IsShown() then
+      if HideUIPanel then HideUIPanel(frame) else frame:Hide() end
+    end
+  end
+  shut()
+  if C_Timer and C_Timer.After then C_Timer.After(0, shut) end
+end
+
+local function BlockTradeWindow(profName, close, frame)
   if not licenseOn() or not profName then return end
   if not TT.IsProfessionLocked(profName) then return end
-  if close then
-    if C_Timer and C_Timer.After then C_Timer.After(0, close) else close() end
-  end
+  ShutTradeWindow(close, frame)
   local now = GetTime()
   if lastProfWarn[profName] and now - lastProfWarn[profName] < 5 then return end
   lastProfWarn[profName] = now
@@ -380,18 +391,20 @@ local function CheckOpenTradeWindows()
   local checked = false
   local name = GetTradeSkillLine and GetTradeSkillLine()
   if name and name ~= "UNKNOWN" and name ~= "" then
-    BlockTradeWindow(name, CloseTradeSkill)
+    BlockTradeWindow(name, CloseTradeSkill, TradeSkillFrame)
     checked = true
   end
   local craft = (GetCraftDisplaySkillLine and GetCraftDisplaySkillLine())
     or (GetCraftName and GetCraftName())
   if craft and craft ~= "UNKNOWN" and craft ~= ""
       and (not CraftFrame or CraftFrame:IsShown()) then
-    BlockTradeWindow(craft, CloseCraft)
+    BlockTradeWindow(craft, CloseCraft, CraftFrame)
     checked = true
   end
   return checked
 end
+
+TT.CheckTradeWindows = CheckOpenTradeWindows
 
 local function CheckTradeWindowsSoon()
   if CheckOpenTradeWindows() then return end
