@@ -2,7 +2,10 @@
 -- owning that item's card.
 --
 --   Equip checks : warn + record a violation when a carded-but-unowned item
---                  is equipped (honor system with receipts - no auto-unequip)
+--                  is equipped. Since 0.5.0 the auto-unequip lives in
+--                  LicenseEnforce.lua (TT.SweepLockedGear serves both the
+--                  item-card and license layers); this file keeps the
+--                  item-layer visuals and the violation bookkeeping.
 --   Paperdoll    : red lock overlay on character-sheet slots in violation
 --   Bags         : small lock marker on bag items you could not legally equip
 --

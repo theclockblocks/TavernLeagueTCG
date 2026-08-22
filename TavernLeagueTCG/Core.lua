@@ -156,11 +156,16 @@ function TT.RunKey()
   return "realm:" .. TT.RealmKey()
 end
 
+local seededRuns = {}   -- session cache: default-fill each run once
+
 function TT.Run()
   local runs = TT.cdb.runs
   local key = TT.RunKey()
   runs[key] = runs[key] or {}
-  applyDefaults(runs[key], runDefaults)
+  if not seededRuns[key] then
+    applyDefaults(runs[key], runDefaults)
+    seededRuns[key] = true
+  end
   return runs[key]
 end
 
@@ -1105,6 +1110,7 @@ end
 function TT.Refresh()
   if TT.UI_Refresh then TT.UI_Refresh() end
   if TT.Enforce_Update then TT.Enforce_Update() end
+  if TT.LicenseEnforce_Update then TT.LicenseEnforce_Update() end
 end
 
 ---------------------------------------------------------------------------

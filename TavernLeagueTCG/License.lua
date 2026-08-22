@@ -26,6 +26,19 @@ function TT.ItemLayerActive()
   return TT.FormatFlag("itemEnforce") == true
 end
 
+-- Talent points this character has EARNED (box "talent-i" is worth the
+-- i-th talent card's points; positional, like DeckLocked).
+function TT.LicenseTalentPoints()
+  local run = TT.Run()
+  local total = 0
+  for i, card in ipairs(TT.licenseTalents or {}) do
+    if run.unlocked["talent-" .. i] then
+      total = total + (card.points or 5)
+    end
+  end
+  return total
+end
+
 ---------------------------------------------------------------------------
 -- Eligibility: undrawn, level met, not expansion-gated. Also stamps when
 -- each card FIRST became eligible - draft offers favor cards that have
