@@ -1171,6 +1171,11 @@ function TT.SetupForPlayer()
   TT.GrantRetroPacks()
   if TT.GrantRetroLicenses then TT.GrantRetroLicenses() end
   if TT.LicenseLayerActive and TT.LicenseLayerActive() then
+    -- license formats are always under the lock; profiles that picked one
+    -- before this rule existed (or via older dev builds) catch up here
+    if not TT.Profile().lockedMode then
+      TT.EnableLockedMode()
+    end
     if TT.MaybeOfferDeckLockedImport then TT.MaybeOfferDeckLockedImport() end
     local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
     if isLoaded and isLoaded("DeckLocked") then
