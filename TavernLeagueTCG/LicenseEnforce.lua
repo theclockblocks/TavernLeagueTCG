@@ -261,46 +261,70 @@ local function CheckBagViolations()
 end
 
 ---------------------------------------------------------------------------
--- Professions: a locked trade's window will not open
+-- Professions: a locked trade's window will not open, its icons wear the
+-- lock, working it in the world is called out, and a trainer will not
+-- teach it.
 --
 -- The deck sells two GENERIC primary slots plus the three secondaries, so
 -- which trade fills prof-1 is the player's call: the first primary a run
 -- opens claims the first free slot and keeps it, persisted, so the claim
--- survives a relog. Trade names come from the client's own spell names,
--- which keeps this locale-proof - and anything not in the table (Beast
--- Training, say) is none of our business.
+-- survives a relog. Names come from the client's own spell names, which
+-- keeps this locale-proof, and anything not in the table (Beast Training,
+-- say) is none of our business.
+--
+-- A trade answers to several names - Herbalism gathers with "Herb
+-- Gathering", Mining smelts at a "Smelting" window - so every alias maps
+-- to one canonical name and the slot bookkeeping only ever sees that.
 ---------------------------------------------------------------------------
 
-local PRIMARY_SPELLS = {
-  2259,   -- Alchemy
-  2018,   -- Blacksmithing
-  7411,   -- Enchanting
-  4036,   -- Engineering
-  2366,   -- Herbalism
-  25229,  -- Jewelcrafting (TBC)
-  2108,   -- Leatherworking
-  2575,   -- Mining
-  8613,   -- Skinning
-  3908,   -- Tailoring
-}
-local SECONDARY_SPELLS = {
-  [2550] = "cooking",
-  [3273] = "firstaid",
-  [7620] = "fishing",
+local PROFESSIONS = {
+  -- key: "primary" for the two generic slots, else the license box.
+  -- world: cast on something out in the world rather than at a window,
+  --        so it can only be called out after the fact.
+  { key = "primary",  spells = { 2259 } },                    -- Alchemy
+  { key = "primary",  spells = { 2018 } },                    -- Blacksmithing
+  { key = "primary",  spells = { 7411 } },                    -- Enchanting
+  { key = "primary",  spells = { 4036 } },                    -- Engineering
+  { key = "primary",  spells = { 2366, 2383 }, world = true,  -- Herbalism,
+    aliases = { "Herbalism" } },                              -- + Find Herbs
+  { key = "primary",  spells = { 25229 } },                   -- Jewelcrafting
+  { key = "primary",  spells = { 2108 } },                    -- Leatherworking
+  { key = "primary",  spells = { 2575, 2580, 2656 },          -- Mining,
+    world = true },                                           -- Find Minerals, Smelting
+  { key = "primary",  spells = { 8613 }, world = true },      -- Skinning
+  { key = "primary",  spells = { 3908 } },                    -- Tailoring
+  { key = "cooking",  spells = { 2550 } },
+  { key = "firstaid", spells = { 3273 } },
+  { key = "fishing",  spells = { 7620 }, world = true },
 }
 
-local profKinds = nil     -- [localized trade name] = "primary" | license key
+local profKinds = nil     -- [any name for a trade] = "primary" | license key
+local profCanon = nil     -- [any name for a trade] = its canonical name
+local profWorld = nil     -- [any name for a trade] = true if worked in the world
 local lastProfWarn = {}
 
 local function BuildProfLookup()
-  profKinds = {}
-  for _, spellId in ipairs(PRIMARY_SPELLS) do
-    local name = GetSpellInfo(spellId)
-    if name then profKinds[name] = "primary" end
-  end
-  for spellId, key in pairs(SECONDARY_SPELLS) do
-    local name = GetSpellInfo(spellId)
-    if name then profKinds[name] = key end
+  profKinds, profCanon, profWorld = {}, {}, {}
+  for _, prof in ipairs(PROFESSIONS) do
+    local names = {}
+    for _, spellId in ipairs(prof.spells) do
+      local name = GetSpellInfo(spellId)
+      if name then names[#names + 1] = name end
+    end
+    -- the skill line does not always share the gathering spell's name and
+    -- no API hands it over, so those few are listed by hand (English only,
+    -- which costs a non-English client nothing but a slot re-claim)
+    for _, alias in ipairs(prof.aliases or {}) do
+      names[#names + 1] = alias
+    end
+    local canon = names[1]
+    if canon then
+      for _, name in ipairs(names) do
+        profKinds[name] = prof.key
+        profCanon[name] = canon
+        if prof.world then profWorld[name] = true end
+      end
+    end
   end
 end
 
@@ -312,8 +336,8 @@ local function KnownProfessions()
   if not (GetNumSkillLines and GetSkillLineInfo) then return known, false end
   for i = 1, GetNumSkillLines() do
     local name, isHeader = GetSkillLineInfo(i)
-    if not isHeader and name and profKinds[name] then
-      known[name] = true
+    if not isHeader and name and profCanon[name] then
+      known[profCanon[name]] = true
       sawAny = true
     end
   end
@@ -333,9 +357,10 @@ local function ProfessionLicenseKey(profName, peek)
   if not kind then return nil end
   if kind ~= "primary" then return kind end
 
+  local canon = profCanon[profName]
   local run = TT.Run()
   run.profSlots = run.profSlots or {}
-  if run.profSlots[profName] then return run.profSlots[profName] end
+  if run.profSlots[canon] then return run.profSlots[canon] end
 
   local known, sawAny = KnownProfessions()
   local taken = {}
@@ -351,7 +376,7 @@ local function ProfessionLicenseKey(profName, peek)
   for i = 1, 2 do
     local slot = "prof-" .. i
     if not taken[slot] and TT.IsUnlocked(slot) then
-      if not peek then run.profSlots[profName] = slot end
+      if not peek then run.profSlots[canon] = slot end
       return slot
     end
   end
@@ -363,6 +388,14 @@ function TT.IsProfessionLocked(profName, peek)
   if key == nil then return false end
   if key == false then return true end
   return not TT.IsUnlocked(key)
+end
+
+-- Worked out in the world rather than at a window: gathering and fishing
+-- can only be called out once the cast lands, same as a locked spell.
+function TT.IsWorldTradeLocked(name)
+  if not profKinds then BuildProfLookup() end
+  if not name or not profWorld[name] then return false end
+  return TT.IsProfessionLocked(name, true)
 end
 
 -- What the spellbook and the action bars paint a lock on: an ability the
@@ -440,6 +473,44 @@ local function HookTradeFrames()
       hookedFrames[name] = true
       f:HookScript("OnShow", CheckTradeWindowsSoon)
     end
+  end
+end
+
+---------------------------------------------------------------------------
+-- Trainers: a locked trade will not be taught
+--
+-- BuyTrainerService is a plain API rather than a protected one, so
+-- wrapping it refuses the purchase outright instead of complaining once
+-- the gold is gone. The service's skill line names the trade; class
+-- training and everything else a trainer offers passes straight through.
+---------------------------------------------------------------------------
+
+local function TrainerServiceTrade(index)
+  local line = GetTrainerServiceSkillLine and GetTrainerServiceSkillLine(index)
+  if line and profKinds[line] then return line end
+  -- learning a trade lists it under its own name, not a skill line
+  local name = GetTrainerServiceInfo and GetTrainerServiceInfo(index)
+  if name and profKinds[name] then return name end
+  return nil
+end
+
+local trainerBlocked = false
+
+local function InstallTrainerBlock()
+  if trainerBlocked or type(BuyTrainerService) ~= "function" then return end
+  trainerBlocked = true
+  local original = BuyTrainerService
+  BuyTrainerService = function(index, ...)
+    if licenseOn() then
+      if not profKinds then BuildProfLookup() end
+      local trade = TrainerServiceTrade(index)
+      if trade and TT.IsProfessionLocked(trade, true) then
+        TT.Warn(trade .. " is locked - earn its license before a trainer will teach it.")
+        TT.LogEvent("violation", nil, { trainer = trade })
+        return
+      end
+    end
+    return original(index, ...)
   end
 end
 
@@ -562,13 +633,21 @@ end
 local function OnSpellcastSucceeded(unit, _, spellID)
   if unit ~= "player" or not licenseOn() or not spellID then return end
   local name = GetSpellInfo(spellID)
-  if not name or not IsSpellLocked(name) then return end
+  if not name then return end
+
+  -- a trade worked in the world - a herb pulled, an ore struck, a cast
+  -- line - reads as a violation. Trades with a window are left alone:
+  -- that window has already been shut in the player's face.
+  local trade = TT.IsWorldTradeLocked(name)
+  if not trade and not IsSpellLocked(name) then return end
 
   local now = GetTime()
   if lastCastWarn[name] and now - lastCastWarn[name] < 5 then return end
   lastCastWarn[name] = now
 
-  local msg = "LICENSE VIOLATION: " .. name .. " - you don't hold its card!"
+  local msg = "LICENSE VIOLATION: " .. name
+    .. (trade and " - you don't hold a license for that trade!"
+             or " - you don't hold its card!")
   if RaidNotice_AddMessage and RaidWarningFrame then
     RaidNotice_AddMessage(RaidWarningFrame, msg, ChatTypeInfo["RAID_WARNING"])
   end
@@ -685,6 +764,7 @@ ef:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
   if event == "PLAYER_ENTERING_WORLD" then
     TT.LicenseEnforce_Update()
     HookTradeFrames()
+    InstallTrainerBlock()
     if SpellBookFrame then
       SpellBookFrame:HookScript("OnShow", function() bookTicker:Show() end)
       SpellBookFrame:HookScript("OnHide", function() bookTicker:Hide() end)
