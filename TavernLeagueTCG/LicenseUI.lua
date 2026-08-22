@@ -135,6 +135,104 @@ local function RefreshDeckGrid()
 end
 
 ---------------------------------------------------------------------------
+-- Goals checklist + dungeon tracker
+---------------------------------------------------------------------------
+
+local function CreateTextRow(parent, width, onClick)
+  local b = CreateFrame("Button", nil, parent)
+  b:SetSize(width, 15)
+  b:RegisterForClicks("LeftButtonUp")
+  b.text = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  b.text:SetPoint("LEFT")
+  b.text:SetJustifyH("LEFT")
+  b.text:SetWidth(width)
+  if onClick then b:SetScript("OnClick", onClick) end
+  return b
+end
+
+local function BuildGoalsPanel(panel)
+  local goalsHead = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  goalsHead:SetPoint("TOPLEFT", 0, 0)
+  goalsHead:SetText("TAVERN GOALS")
+  goalsHead:SetTextColor(0.55, 0.5, 0.35)
+
+  ui.goalRows = {}
+  local boxes = {}
+  for _, group in ipairs({ TT.goalEnchantBoxes, TT.goalJcBoxes, TT.goalMiscBoxes }) do
+    for _, box in ipairs(group) do boxes[#boxes + 1] = box end
+  end
+  for i, box in ipairs(boxes) do
+    local row = CreateTextRow(panel, 340, function()
+      TT.ToggleGoal(box.id)
+    end)
+    row:SetPoint("TOPLEFT", 0, -(16 + (i - 1) * 16))
+    row.box = box
+    row:SetScript("OnEnter", function(self)
+      GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+      GameTooltip:SetText(box.name or box.label, 1, 0.82, 0)
+      if box.desc then GameTooltip:AddLine(box.desc, 0.8, 0.8, 0.8, true) end
+      if box.honor then
+        GameTooltip:AddLine("Honor system - check it yourself.", 0.6, 0.6, 0.6)
+      else
+        GameTooltip:AddLine("Auto-detected.", 0.6, 0.6, 0.6)
+      end
+      GameTooltip:Show()
+    end)
+    row:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ui.goalRows[i] = row
+  end
+
+  local dungHead = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+  dungHead:SetPoint("TOPLEFT", 380, 0)
+  dungHead:SetText("DUNGEONS")
+  dungHead:SetTextColor(0.55, 0.5, 0.35)
+  ui.dungHead = dungHead
+
+  ui.dungeonRows = {}
+  local function addColumn(list, x)
+    for i, name in ipairs(list) do
+      local row = CreateTextRow(panel, 180, function()
+        if IsShiftKeyDown() then
+          TT.UncompleteDungeon(name)
+        else
+          TT.CompleteDungeon(name)
+        end
+      end)
+      row:SetPoint("TOPLEFT", x, -(16 + (i - 1) * 14))
+      row.dungeon = name
+      row.derived = TT.DUNGEON_BONUS[name] ~= nil
+      ui.dungeonRows[#ui.dungeonRows + 1] = row
+    end
+  end
+  addColumn(TT.DUNGEONS_ERA, 380)
+  if TT.IS_TBC then addColumn(TT.DUNGEONS_TBC, 580) end
+end
+
+local function RefreshGoalsPanel()
+  local run = TT.Run()
+  for _, row in ipairs(ui.goalRows or {}) do
+    local done = run.goals[row.box.id]
+    row.text:SetText((done and "|cff20ff20[x]|r " or "|cff777777[  ]|r ")
+      .. (row.box.name or row.box.label))
+    row.text:SetTextColor(done and 0.9 or 0.65, done and 0.9 or 0.65, done and 0.9 or 0.65)
+  end
+  local heroicNote = ""
+  if TT.IS_TBC then
+    local cleared, total = TT.HeroicsCleared()
+    heroicNote = ("   |cff777777heroics %d/%d|r"):format(cleared, total)
+  end
+  ui.dungHead:SetText("DUNGEONS" .. heroicNote)
+  for _, row in ipairs(ui.dungeonRows or {}) do
+    local done = run.dungeons[row.dungeon]
+    local heroic = run.dungeonsHeroic[row.dungeon]
+    local mark = done and "|cff20ff20+|r " or "|cff777777-|r "
+    row.text:SetText(mark .. row.dungeon
+      .. (heroic and " |cffff8000[H]|r" or "")
+      .. (row.derived and " |cff777777*|r" or ""))
+  end
+end
+
+---------------------------------------------------------------------------
 -- Page
 ---------------------------------------------------------------------------
 
@@ -191,14 +289,21 @@ function TT.License_BuildUI(page)
   end)
   ui.undoBtn:SetPoint("TOPRIGHT", ui.bonusBtn, "BOTTOMRIGHT", 0, -6)
 
+  ui.viewToggle = MakeButton(170, "Goals & dungeons", function()
+    ui.showGoals = not ui.showGoals
+    TT.License_Refresh()
+  end)
+  ui.viewToggle:SetPoint("TOPLEFT", 12, -60)
+
   ui.deckGrid = CreateFrame("Frame", nil, page)
   ui.deckGrid:SetPoint("TOPLEFT", 14, -118)
   ui.deckGrid:SetPoint("BOTTOMRIGHT", -14, 30)
 
-  ui.goalsNote = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  ui.goalsNote:SetPoint("BOTTOM", 0, 10)
-  ui.goalsNote:SetTextColor(0.45, 0.45, 0.45)
-  ui.goalsNote:SetText("Tavern goals and the dungeon tracker arrive later in this update.")
+  ui.goalsPanel = CreateFrame("Frame", nil, page)
+  ui.goalsPanel:SetPoint("TOPLEFT", 14, -118)
+  ui.goalsPanel:SetPoint("BOTTOMRIGHT", -14, 10)
+  ui.goalsPanel:Hide()
+  BuildGoalsPanel(ui.goalsPanel)
 
   ui.built = false
 end
@@ -211,6 +316,21 @@ function TT.License_Refresh()
   if not ui.built and TT.licenseCards then
     BuildDeckGrid()
     ui.built = true
+  end
+
+  -- deck view vs goals view
+  ui.deckGrid:SetShown(not ui.showGoals)
+  ui.goalsPanel:SetShown(ui.showGoals and true or false)
+  ui.viewToggle:SetText(ui.showGoals and "License deck" or "Goals & dungeons")
+  if ui.showGoals then
+    -- the dungeon tracker is a license-format feature; goals pay out
+    -- in every format
+    local showDungeons = licActive
+    ui.dungHead:SetShown(showDungeons)
+    for _, row in ipairs(ui.dungeonRows or {}) do
+      row:SetShown(showDungeons)
+    end
+    RefreshGoalsPanel()
   end
 
   local drawn = 0

@@ -178,9 +178,12 @@ function TT.SetFormat(fmt)
   TT.LogEvent("event", ("%s chose the %s format for %s."):format(
     UnitName("player") or "?", TT.FORMATS[fmt].label, TT.ProfileLabel()))
   TT.Msg(("Format locked in: |cffffd100%s|r."):format(TT.FORMATS[fmt].label))
-  -- the catch-up grants waited for the format decision
+  -- the catch-up grants and goal scans waited for the format decision
   TT.GrantRetroPacks()
   if TT.GrantRetroLicenses then TT.GrantRetroLicenses() end
+  if TT.RunGoalScans and C_Timer and C_Timer.After then
+    C_Timer.After(0.2, function() TT.RunGoalScans(true) end)
+  end
   TT.Refresh()
   return true
 end
@@ -610,8 +613,12 @@ function TT.OnCombatLogEvent()
     TT.AddCredits(credits, "kills")
 
   elseif subevent == "UNIT_DIED" then
-    if paidBosses[destGUID] then return end
     local npcId = tonumber((select(6, strsplit("-", destGUID))))
+    -- goal/dungeon detection is idempotent and must see every death -
+    -- including repeat kills of a boss the bounty already paid (a normal
+    -- clear followed by a heroic clear, say)
+    if npcId and TT.Goals_OnKill then TT.Goals_OnKill(npcId) end
+    if paidBosses[destGUID] then return end
     local dungeon = npcId and TT.FINAL_BOSSES[npcId]
     if dungeon then
       paidBosses[destGUID] = true
@@ -1081,6 +1088,7 @@ end
 
 local TRADE_VERBS = { T_REQ = true, T_OFFER = true, T_ACCEPT = true,
   T_LOCK = true, T_COMMIT = true, T_ABORT = true }
+local GROUP_VERBS = { KILL = true, KILLH = true }
 
 function TT.OnAddonMessage(prefix, msg, channel, sender)
   if prefix ~= TT.MSG_PREFIX then return end
@@ -1099,6 +1107,15 @@ function TT.OnAddonMessage(prefix, msg, channel, sender)
     if not TT.FormatFlag("trade") then return end   -- format has no trading
     if TT.Trade_OnMessage then
       TT.Trade_OnMessage(verb, payload, sender, shortSender, version)
+    end
+  elseif GROUP_VERBS[verb] then
+    -- boss-kill sync: group channels only; deliberately lenient on the
+    -- protocol version (a stale peer's boss kill is still true)
+    if channel ~= "PARTY" and channel ~= "RAID" and channel ~= "INSTANCE_CHAT" then
+      return
+    end
+    if TT.Goals_OnGroupKill then
+      TT.Goals_OnGroupKill(verb == "KILLH", tonumber(payload), shortSender)
     end
   end
 end
