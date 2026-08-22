@@ -390,6 +390,9 @@ local function ProfessionLicenseKey(profName, peek)
 end
 
 function TT.IsProfessionLocked(profName, peek)
+  -- nothing is locked while the layer is off, and a dormant format must
+  -- never claim a slot on the way to saying so
+  if not licenseOn() then return false end
   local key = ProfessionLicenseKey(profName, peek)
   if key == nil then return false end
   if key == false then return true end
