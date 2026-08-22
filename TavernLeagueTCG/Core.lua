@@ -181,6 +181,7 @@ function TT.SetFormat(fmt)
   -- the catch-up grants and goal scans waited for the format decision
   TT.GrantRetroPacks()
   if TT.GrantRetroLicenses then TT.GrantRetroLicenses() end
+  if TT.MaybeOfferDeckLockedImport then TT.MaybeOfferDeckLockedImport() end
   if TT.RunGoalScans and C_Timer and C_Timer.After then
     C_Timer.After(0.2, function() TT.RunGoalScans(true) end)
   end
@@ -1159,6 +1160,14 @@ function TT.SetupForPlayer()
   TT.SeedHonorKills()
   TT.GrantRetroPacks()
   if TT.GrantRetroLicenses then TT.GrantRetroLicenses() end
+  if TT.LicenseLayerActive and TT.LicenseLayerActive() then
+    if TT.MaybeOfferDeckLockedImport then TT.MaybeOfferDeckLockedImport() end
+    local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+    if isLoaded and isLoaded("DeckLocked") then
+      TT.Msg("|cffff4444Heads up:|r DeckLocked is also running - two enforcement " ..
+        "engines will fight over your gear. Consider disabling one.")
+    end
+  end
 end
 
 -- One-time catch-up so the addon is worth installing on an existing

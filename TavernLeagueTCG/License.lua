@@ -395,6 +395,113 @@ function TT.OnLevelUpLicenses(newLevel)
   TT.EligibleLicenses()
 end
 
+---------------------------------------------------------------------------
+-- DeckLocked import: card ids were preserved, so a DeckLocked character
+-- can carry their whole permission run into Challenge or League. Copies
+-- only - DeckLockedCharDB is NEVER written.
+---------------------------------------------------------------------------
+
+-- DeckLocked's short dungeon keys -> this addon's display names
+local DL_DUNGEONS = {
+  ["RFC"] = "Ragefire Chasm", ["WC"] = "Wailing Caverns",
+  ["DM"] = "The Deadmines", ["SFK"] = "Shadowfang Keep",
+  ["BFD"] = "Blackfathom Deeps", ["Stocks"] = "The Stockade",
+  ["Gnomer"] = "Gnomeregan", ["RFK"] = "Razorfen Kraul",
+  ["SM GY"] = "SM Graveyard", ["SM Lib"] = "SM Library",
+  ["SM Arms"] = "SM Armory", ["SM Cath"] = "SM Cathedral",
+  ["SM Bonus"] = "SM Bonus", ["RFD"] = "Razorfen Downs",
+  ["Ulda"] = "Uldaman", ["ZF"] = "Zul'Farrak", ["Mara"] = "Maraudon",
+  ["ST"] = "Sunken Temple", ["BRD"] = "Blackrock Depths",
+  ["LBRS"] = "Lower Blackrock Spire", ["UBRS"] = "Upper Blackrock Spire",
+  ["DME"] = "Dire Maul East", ["DMW"] = "Dire Maul West",
+  ["DMN"] = "Dire Maul North", ["Strat"] = "Stratholme",
+  ["Scholo"] = "Scholomance", ["Classic Bonus"] = "Classic Bonus",
+  ["Ramps"] = "Hellfire Ramparts", ["BF"] = "The Blood Furnace",
+  ["SP"] = "The Slave Pens", ["UB"] = "The Underbog",
+  ["MT"] = "Mana-Tombs", ["AC"] = "Auchenai Crypts",
+  ["Old Hillsbrad"] = "Old Hillsbrad", ["Sethekk Halls"] = "Sethekk Halls",
+  ["SV"] = "The Steamvault", ["Shadow Lab"] = "Shadow Labyrinth",
+  ["SHalls"] = "The Shattered Halls", ["BM"] = "The Black Morass",
+  ["Bot"] = "The Botanica", ["Mech"] = "The Mechanar",
+  ["Arca"] = "The Arcatraz", ["TBC Bonus"] = "TBC Bonus",
+}
+
+function TT.ImportDeckLocked()
+  local dl = DeckLockedCharDB
+  if not dl then return end
+  local run = TT.Run()
+  local level = UnitLevel("player") or 1
+  local imported = 0
+
+  for id in pairs(dl.drawn or {}) do
+    if TT.licenseById[id] and not run.drawn[id] then
+      run.drawn[id] = true
+      imported = imported + 1
+    end
+  end
+  -- DeckLocked kept goal boxes and unlock boxes in one table; split them
+  for key in pairs(dl.unlocked or {}) do
+    if TT.goalBoxIndex and TT.goalBoxIndex[key] then
+      run.goals[key] = true
+    else
+      run.unlocked[key] = true
+    end
+  end
+  for short in pairs(dl.dungeons or {}) do
+    local name = DL_DUNGEONS[short]
+    if name then run.dungeons[name] = true end
+  end
+  for short in pairs(dl.heroics or {}) do
+    local name = DL_DUNGEONS[short]
+    if name then run.dungeonsHeroic[name] = true end
+  end
+
+  local drawnCount = 0
+  for _ in pairs(run.drawn) do drawnCount = drawnCount + 1 end
+  if TT.FormatFlag("drafts") then
+    -- League never existed in DeckLocked: each level owed one pick, and
+    -- the imported keeps count as picks already taken
+    run.draftPacks = math.max(0, (level - 1) - drawnCount)
+  else
+    -- Challenge trusts DeckLocked's own draw accounting
+    run.drawCredits = dl.drawCredits or 0
+    run.bonusDraws = dl.bonusDraws or 0
+  end
+  run.importedFrom = "decklocked"
+  TT.cdb.retroLicense[TT.Profile().format] = true   -- import replaces the catch-up
+
+  TT.LogEvent("event", ("%s imported their DeckLocked run: %d licenses."):format(
+    UnitName("player") or "?", imported))
+  TT.Msg(("DeckLocked run imported: |cffffd100%d licenses|r, goals and dungeons carried over."):format(
+    imported))
+  TT.Refresh()
+end
+
+-- Offer the import once per character, when a license-format run is
+-- fresh and DeckLocked progress exists on this character.
+function TT.MaybeOfferDeckLockedImport()
+  if TT.cdb.dlImportOffered then return end
+  if not TT.LicenseLayerActive() then return end
+  local dl = DeckLockedCharDB
+  if not dl or not dl.drawn or not next(dl.drawn) then return end
+  if next(TT.Run().drawn) then return end   -- this run already has picks
+  TT.cdb.dlImportOffered = true
+  StaticPopup_Show("TAVERNLEAGUETCG_DLIMPORT")
+end
+
+StaticPopupDialogs.TAVERNLEAGUETCG_DLIMPORT = {
+  text = "DeckLocked progress found for this character.\n\nImport it into this run? "
+    .. "Licenses, talent boxes, goals and dungeon clears carry over 1:1 "
+    .. "(DeckLocked itself is not modified). This replaces the level catch-up grant.",
+  button1 = "Import",
+  button2 = "Start fresh",
+  OnAccept = function() TT.ImportDeckLocked() end,
+  timeout = 0,
+  whileDead = true,
+  hideOnEscape = true,
+  preferredIndex = 3,
+}
+
 function TT.GrantRetroLicenses()
   if not TT.LicenseLayerActive() then return end
   local p = TT.Profile()
