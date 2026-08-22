@@ -143,6 +143,7 @@ local runDefaults = {
   eligibleSince = {},    -- [licenseCardId] = level it first became eligible
   packsSinceUsable = 0,  -- internal pack-roll bookkeeping
   goals = {},            -- [goalId] = true
+  profSlots = {},        -- [tradeName] = "prof-1"/"prof-2", claimed on first use
   dungeons = {},         -- [dungeonName] = true
   dungeonsHeroic = {},   -- [dungeonName] = true (TBC heroic clears)
   -- pendingDraw / pendingDraft persist an in-progress draw or draft pack

@@ -261,6 +261,129 @@ local function CheckBagViolations()
 end
 
 ---------------------------------------------------------------------------
+-- Professions: a locked trade's window will not open
+--
+-- The deck sells two GENERIC primary slots plus the three secondaries, so
+-- which trade fills prof-1 is the player's call: the first primary a run
+-- opens claims the first free slot and keeps it, persisted, so the claim
+-- survives a relog. Trade names come from the client's own spell names,
+-- which keeps this locale-proof - and anything not in the table (Beast
+-- Training, say) is none of our business.
+---------------------------------------------------------------------------
+
+local PRIMARY_SPELLS = {
+  2259,   -- Alchemy
+  2018,   -- Blacksmithing
+  7411,   -- Enchanting
+  4036,   -- Engineering
+  2366,   -- Herbalism
+  25229,  -- Jewelcrafting (TBC)
+  2108,   -- Leatherworking
+  2575,   -- Mining
+  8613,   -- Skinning
+  3908,   -- Tailoring
+}
+local SECONDARY_SPELLS = {
+  [2550] = "cooking",
+  [3273] = "firstaid",
+  [7620] = "fishing",
+}
+
+local profKinds = nil     -- [localized trade name] = "primary" | license key
+local lastProfWarn = {}
+
+local function BuildProfLookup()
+  profKinds = {}
+  for _, spellId in ipairs(PRIMARY_SPELLS) do
+    local name = GetSpellInfo(spellId)
+    if name then profKinds[name] = "primary" end
+  end
+  for spellId, key in pairs(SECONDARY_SPELLS) do
+    local name = GetSpellInfo(spellId)
+    if name then profKinds[name] = key end
+  end
+end
+
+-- Best effort: the skill lines currently on show. Enough to release a slot
+-- claimed by a trade the character has since dropped, and when the scan
+-- comes back empty we simply keep every claim.
+local function KnownProfessions()
+  local known, sawAny = {}, false
+  if not (GetNumSkillLines and GetSkillLineInfo) then return known, false end
+  for i = 1, GetNumSkillLines() do
+    local name, isHeader = GetSkillLineInfo(i)
+    if not isHeader and name and profKinds[name] then
+      known[name] = true
+      sawAny = true
+    end
+  end
+  return known, sawAny
+end
+
+-- nil = not a trade we police; a string = the license key that frees it;
+-- false = a primary with no slot left to claim, so it stays shut.
+local function ProfessionLicenseKey(profName)
+  if not profKinds then BuildProfLookup() end
+  local kind = profName and profKinds[profName]
+  if not kind then return nil end
+  if kind ~= "primary" then return kind end
+
+  local run = TT.Run()
+  run.profSlots = run.profSlots or {}
+  if run.profSlots[profName] then return run.profSlots[profName] end
+
+  local known, sawAny = KnownProfessions()
+  local taken = {}
+  for name, slot in pairs(run.profSlots) do
+    if sawAny and not known[name] then
+      run.profSlots[name] = nil       -- trade dropped: hand the slot back
+    else
+      taken[slot] = true
+    end
+  end
+  for i = 1, 2 do
+    local slot = "prof-" .. i
+    if not taken[slot] and TT.IsUnlocked(slot) then
+      run.profSlots[profName] = slot
+      return slot
+    end
+  end
+  return false
+end
+
+function TT.IsProfessionLocked(profName)
+  local key = ProfessionLicenseKey(profName)
+  if key == nil then return false end
+  if key == false then return true end
+  return not TT.IsUnlocked(key)
+end
+
+-- Shut the window on the next frame: closing one from inside its own SHOW
+-- event can catch the Blizzard UI mid-open.
+local function BlockTradeWindow(profName, close)
+  if not licenseOn() or not profName then return end
+  if not TT.IsProfessionLocked(profName) then return end
+  if close then
+    if C_Timer and C_Timer.After then C_Timer.After(0, close) else close() end
+  end
+  local now = GetTime()
+  if lastProfWarn[profName] and now - lastProfWarn[profName] < 5 then return end
+  lastProfWarn[profName] = now
+  TT.Warn(profName .. " is locked - you don't hold a profession license for it!")
+end
+
+local function OnTradeSkillShow()
+  local name = GetTradeSkillLine and GetTradeSkillLine()
+  BlockTradeWindow(name, CloseTradeSkill)
+end
+
+local function OnCraftShow()
+  local name = (GetCraftDisplaySkillLine and GetCraftDisplaySkillLine())
+    or (GetCraftName and GetCraftName())
+  BlockTradeWindow(name, CloseCraft)
+end
+
+---------------------------------------------------------------------------
 -- Spellbook: gray + block locked spells
 ---------------------------------------------------------------------------
 
@@ -490,6 +613,8 @@ ef:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
 ef:RegisterEvent("SPELLS_CHANGED")
 ef:RegisterEvent("CHARACTER_POINTS_CHANGED")
 ef:RegisterEvent("BAG_UPDATE_DELAYED")
+ef:RegisterEvent("TRADE_SKILL_SHOW")
+ef:RegisterEvent("CRAFT_SHOW")
 ef:RegisterEvent("ADDON_LOADED")
 
 ef:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
@@ -527,6 +652,12 @@ ef:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
 
   elseif event == "BAG_UPDATE_DELAYED" then
     CheckBagViolations()
+
+  elseif event == "TRADE_SKILL_SHOW" then
+    OnTradeSkillShow()
+
+  elseif event == "CRAFT_SHOW" then
+    OnCraftShow()
 
   elseif event == "ADDON_LOADED" and arg1 == "Blizzard_TalentUI" then
     local tframe = _G.PlayerTalentFrame or _G.TalentFrame
