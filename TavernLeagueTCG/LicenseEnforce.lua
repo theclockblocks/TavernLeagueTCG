@@ -336,6 +336,10 @@ local function ButtonSpellName(button)
   return nil
 end
 
+-- An overlay is a plain Frame child of the button: it inherits the
+-- button's position AND its visibility, so a bar the client never lays
+-- out (or hides outright) can never strand a lock on the screen. A
+-- non-secure child neither taints the button nor needs a combat guard.
 local function UpdateActionBarOverlays()
   for _, prefix in ipairs(BAR_PREFIXES) do
     for i = 1, 12 do
@@ -344,12 +348,9 @@ local function UpdateActionBarOverlays()
         local key = prefix .. i
         local ov = overlays.bars[key]
         if not ov then
-          -- parented to UIParent, click-through: never taints secure buttons
-          ov = CreateFrame("Frame", nil, UIParent)
-          if not InCombatLockdown() then
-            ov:SetAllPoints(button)
-          end
-          ov:SetFrameStrata("HIGH")
+          ov = CreateFrame("Frame", nil, button)
+          ov:SetAllPoints(button)
+          ov:SetFrameLevel(button:GetFrameLevel() + 5)
           ov.tint = ov:CreateTexture(nil, "OVERLAY")
           ov.tint:SetAllPoints()
           ov.tint:SetColorTexture(0.8, 0, 0, 0.45)
@@ -361,7 +362,10 @@ local function UpdateActionBarOverlays()
           ov:Hide()
           overlays.bars[key] = ov
         end
-        local name = button:IsShown() and ButtonSpellName(button) or nil
+        -- IsVisible, not IsShown: a button on a hidden bar still reports
+        -- itself shown, and those phantom bars are the ones that sit in
+        -- odd corners of the screen
+        local name = button:IsVisible() and ButtonSpellName(button) or nil
         ov:SetShown(licenseOn() and name ~= nil and IsSpellLocked(name))
       end
     end
