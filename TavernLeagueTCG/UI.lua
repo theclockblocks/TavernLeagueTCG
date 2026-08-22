@@ -1568,10 +1568,23 @@ local function RefreshLocked()
       local when = date("%m-%d %H:%M", entry.t or 0)
       local text
       if entry.kind == "violation" then
-        local row = entry.item and TT.cardIndex and TT.cardIndex["item:" .. entry.item]
-        local name = (row and row.n) or (entry.item and TT.ItemName(entry.item))
-        text = ("|cffff4444[%s]|r %s equipped %s (uncarded)"):format(
-          when, entry.char or "?", name or ("item " .. tostring(entry.item)))
+        -- a violation names what was broken: the item layer logs the item,
+        -- the license layer a spell, a trade worked, or a trainer refused
+        local what
+        if entry.spell then
+          what = ("cast %s without its card"):format(
+            GetSpellInfo(entry.spell) or ("spell " .. tostring(entry.spell)))
+        elseif entry.trade then
+          what = ("worked %s unlicensed"):format(entry.trade)
+        elseif entry.trainer then
+          what = ("was refused %s training"):format(entry.trainer)
+        else
+          local row = entry.item and TT.cardIndex and TT.cardIndex["item:" .. entry.item]
+          local name = (row and row.n) or (entry.item and TT.ItemName(entry.item))
+          what = ("equipped %s (uncarded)"):format(
+            name or ("item " .. tostring(entry.item)))
+        end
+        text = ("|cffff4444[%s]|r %s %s"):format(when, entry.char or "?", what)
       else
         text = ("|cffaaaaaa[%s]|r %s"):format(when, entry.text or "")
       end
