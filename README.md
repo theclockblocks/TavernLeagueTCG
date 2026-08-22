@@ -29,8 +29,10 @@ Every run now picks a format when it begins - permanently:
 - **League** - both games fused. Every level deals a **draft pack**:
   license cards and level-appropriate gear side by side, keep exactly
   **one**. "Battle Stance, or that blue sword?" The full credit economy
-  runs alongside, but licenses only ever come from your draft picks -
-  and wearing an item takes its slot license *and* its card.
+  runs alongside, but licenses only ever come from your draft picks.
+  Slots and abilities lock hard; once a slot's license is earned, any
+  item is free to wear in it - the binder is your collection, not a
+  second permission gate.
 
 Auto-detected **tavern goals** (profession milestones, exalted rep,
 1,000 honorable kills, epic weapons, boss hunts, TBC heroics) pay a

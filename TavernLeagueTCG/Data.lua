@@ -74,8 +74,11 @@ TT.FORMATS = {
                  credits = false, licenses = true,  drafts = false, itemEnforce = false },
   collection = { label = "Collection", packs = true,  binder = true,  trade = true,
                  credits = true,  licenses = false, drafts = false, itemEnforce = true },
+  -- League enforces the LICENSE layer only: once a slot's license is
+  -- earned, any item is free to wear in it - item cards are collection,
+  -- not permission, in this format
   league     = { label = "League",     packs = true,  binder = true,  trade = true,
-                 credits = true,  licenses = true,  drafts = true,  itemEnforce = true },
+                 credits = true,  licenses = true,  drafts = true,  itemEnforce = false },
 }
 
 -- Capability lookup for the active run. Profiles from before formats
