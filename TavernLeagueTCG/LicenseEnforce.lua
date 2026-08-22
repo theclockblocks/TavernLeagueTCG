@@ -630,23 +630,14 @@ end
 -- Cast violations (protected casts can't be blocked - only called out)
 ---------------------------------------------------------------------------
 
--- Gathering and fishing have a cast bar, which is the one opening the
--- API leaves us: interrupting mid-cast makes the attempt actually fail
--- rather than merely be named afterwards. SpellStopCasting may be
--- protected - if it is, the call is refused and we fall back to the
--- violation callout, which is why nothing here depends on it working.
-local function OnSpellcastStart(unit, _, spellID)
-  if unit ~= "player" or not licenseOn() or not spellID then return end
-  local name = GetSpellInfo(spellID)
-  if not name or not TT.IsWorldTradeLocked(name) then return end
-
-  if SpellStopCasting then pcall(SpellStopCasting) end
-
+-- Violations are named, never prevented: casting and gathering are both
+-- protected actions, so the honest enforcement is a loud, logged callout.
+-- One warning per spell per 5s covers the pair of events below.
+local function RaiseViolation(name, msg, payload)
   local now = GetTime()
   if lastCastWarn[name] and now - lastCastWarn[name] < 5 then return end
   lastCastWarn[name] = now
-  local msg = "LICENSE VIOLATION: " .. name
-    .. " - you don't hold a license for that trade!"
+
   if RaidNotice_AddMessage and RaidWarningFrame then
     RaidNotice_AddMessage(RaidWarningFrame, msg, ChatTypeInfo["RAID_WARNING"])
   end
@@ -654,7 +645,18 @@ local function OnSpellcastStart(unit, _, spellID)
     PlaySound(SOUNDKIT.RAID_WARNING)
   end
   TT.Warn(msg)
-  TT.LogEvent("violation", nil, { trade = name })
+  TT.LogEvent("violation", nil, payload)
+end
+
+-- Gathering and fishing have a cast bar, so the call goes out the moment
+-- the player starts working the node rather than once the ore is in the
+-- bag. The successful cast is caught too, in case a trade is instant.
+local function OnSpellcastStart(unit, _, spellID)
+  if unit ~= "player" or not licenseOn() or not spellID then return end
+  local name = GetSpellInfo(spellID)
+  if not name or not TT.IsWorldTradeLocked(name) then return end
+  RaiseViolation(name, "LICENSE VIOLATION: " .. name
+    .. " - you don't hold a license for that trade!", { trade = name })
 end
 
 local function OnSpellcastSucceeded(unit, _, spellID)
@@ -668,21 +670,9 @@ local function OnSpellcastSucceeded(unit, _, spellID)
   local trade = TT.IsWorldTradeLocked(name)
   if not trade and not IsSpellLocked(name) then return end
 
-  local now = GetTime()
-  if lastCastWarn[name] and now - lastCastWarn[name] < 5 then return end
-  lastCastWarn[name] = now
-
-  local msg = "LICENSE VIOLATION: " .. name
+  RaiseViolation(name, "LICENSE VIOLATION: " .. name
     .. (trade and " - you don't hold a license for that trade!"
-             or " - you don't hold its card!")
-  if RaidNotice_AddMessage and RaidWarningFrame then
-    RaidNotice_AddMessage(RaidWarningFrame, msg, ChatTypeInfo["RAID_WARNING"])
-  end
-  if PlaySound and SOUNDKIT and SOUNDKIT.RAID_WARNING then
-    PlaySound(SOUNDKIT.RAID_WARNING)
-  end
-  TT.Warn(msg)
-  TT.LogEvent("violation", nil, { spell = spellID })
+               or " - you don't hold its card!"), { spell = spellID })
 end
 
 ---------------------------------------------------------------------------
