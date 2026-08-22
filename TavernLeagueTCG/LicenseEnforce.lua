@@ -322,7 +322,12 @@ end
 
 -- nil = not a trade we police; a string = the license key that frees it;
 -- false = a primary with no slot left to claim, so it stays shut.
-local function ProfessionLicenseKey(profName)
+--
+-- peek answers the same question without writing anything. Painting an
+-- icon must never claim a slot: having two trades on the action bar would
+-- otherwise spend prof-1 on whichever the repaint happened to reach first,
+-- before the player had chosen.
+local function ProfessionLicenseKey(profName, peek)
   if not profKinds then BuildProfLookup() end
   local kind = profName and profKinds[profName]
   if not kind then return nil end
@@ -336,7 +341,9 @@ local function ProfessionLicenseKey(profName)
   local taken = {}
   for name, slot in pairs(run.profSlots) do
     if sawAny and not known[name] then
-      run.profSlots[name] = nil       -- trade dropped: hand the slot back
+      -- trade dropped: its slot is free either way, and a real check
+      -- also hands it back for good
+      if not peek then run.profSlots[name] = nil end
     else
       taken[slot] = true
     end
@@ -344,18 +351,25 @@ local function ProfessionLicenseKey(profName)
   for i = 1, 2 do
     local slot = "prof-" .. i
     if not taken[slot] and TT.IsUnlocked(slot) then
-      run.profSlots[profName] = slot
+      if not peek then run.profSlots[profName] = slot end
       return slot
     end
   end
   return false
 end
 
-function TT.IsProfessionLocked(profName)
-  local key = ProfessionLicenseKey(profName)
+function TT.IsProfessionLocked(profName, peek)
+  local key = ProfessionLicenseKey(profName, peek)
   if key == nil then return false end
   if key == false then return true end
   return not TT.IsUnlocked(key)
+end
+
+-- What the spellbook and the action bars paint a lock on: an ability the
+-- deck has not dealt, or a trade whose license the run has not earned.
+local function IsNameLocked(name)
+  if not name then return false end
+  return IsSpellLocked(name) or TT.IsProfessionLocked(name, true)
 end
 
 -- Shut the window: end the interaction AND hide the frame, on this frame
@@ -460,7 +474,7 @@ local function UpdateSpellbookOverlays()
         local slot = GetBookSlot(button)
         if slot then
           local name = GetSpellBookItemName(slot, "spell")
-          locked = name and IsSpellLocked(name) or false
+          locked = name and IsNameLocked(name) or false
         end
       end
       ov:SetShown(locked)
@@ -535,7 +549,7 @@ local function UpdateActionBarOverlays()
         -- itself shown, and those phantom bars are the ones that sit in
         -- odd corners of the screen
         local name = button:IsVisible() and ButtonSpellName(button) or nil
-        ov:SetShown(licenseOn() and name ~= nil and IsSpellLocked(name))
+        ov:SetShown(licenseOn() and name ~= nil and IsNameLocked(name))
       end
     end
   end
