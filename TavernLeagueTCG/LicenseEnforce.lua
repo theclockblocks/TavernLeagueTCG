@@ -630,6 +630,33 @@ end
 -- Cast violations (protected casts can't be blocked - only called out)
 ---------------------------------------------------------------------------
 
+-- Gathering and fishing have a cast bar, which is the one opening the
+-- API leaves us: interrupting mid-cast makes the attempt actually fail
+-- rather than merely be named afterwards. SpellStopCasting may be
+-- protected - if it is, the call is refused and we fall back to the
+-- violation callout, which is why nothing here depends on it working.
+local function OnSpellcastStart(unit, _, spellID)
+  if unit ~= "player" or not licenseOn() or not spellID then return end
+  local name = GetSpellInfo(spellID)
+  if not name or not TT.IsWorldTradeLocked(name) then return end
+
+  if SpellStopCasting then pcall(SpellStopCasting) end
+
+  local now = GetTime()
+  if lastCastWarn[name] and now - lastCastWarn[name] < 5 then return end
+  lastCastWarn[name] = now
+  local msg = "LICENSE VIOLATION: " .. name
+    .. " - you don't hold a license for that trade!"
+  if RaidNotice_AddMessage and RaidWarningFrame then
+    RaidNotice_AddMessage(RaidWarningFrame, msg, ChatTypeInfo["RAID_WARNING"])
+  end
+  if PlaySound and SOUNDKIT and SOUNDKIT.RAID_WARNING then
+    PlaySound(SOUNDKIT.RAID_WARNING)
+  end
+  TT.Warn(msg)
+  TT.LogEvent("violation", nil, { trade = name })
+end
+
 local function OnSpellcastSucceeded(unit, _, spellID)
   if unit ~= "player" or not licenseOn() or not spellID then return end
   local name = GetSpellInfo(spellID)
@@ -746,6 +773,7 @@ ef:RegisterEvent("PLAYER_ENTERING_WORLD")
 ef:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 ef:RegisterEvent("PLAYER_REGEN_ENABLED")
 ef:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
+ef:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
 ef:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 ef:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
 ef:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
@@ -785,6 +813,9 @@ ef:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
 
   elseif event == "UNIT_SPELLCAST_SUCCEEDED" then
     OnSpellcastSucceeded(arg1, arg2, arg3)
+
+  elseif event == "UNIT_SPELLCAST_START" then
+    OnSpellcastStart(arg1, arg2, arg3)
 
   elseif event == "ACTIONBAR_SLOT_CHANGED" or event == "ACTIONBAR_PAGE_CHANGED"
       or event == "UPDATE_SHAPESHIFT_FORM" or event == "SPELLS_CHANGED" then
