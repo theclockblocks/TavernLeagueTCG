@@ -684,6 +684,70 @@ local function rollTier(odds)
   return 1
 end
 
+---------------------------------------------------------------------------
+-- Which gear-slot license permits an item, by inventory type. Slots the
+-- license deck doesn't gate (shirts, tabards) map to nothing. Shared with
+-- the enforcement layer for the League equip rule.
+---------------------------------------------------------------------------
+
+TT.INVTYPE_LICENSES = {
+  INVTYPE_HEAD = { "head" }, INVTYPE_NECK = { "neck" },
+  INVTYPE_SHOULDER = { "shoulders" }, INVTYPE_CLOAK = { "back" },
+  INVTYPE_CHEST = { "chest" }, INVTYPE_ROBE = { "chest" },
+  INVTYPE_WRIST = { "wrists" }, INVTYPE_HAND = { "hands" },
+  INVTYPE_WAIST = { "waist" }, INVTYPE_LEGS = { "legs" },
+  INVTYPE_FEET = { "feet" },
+  INVTYPE_FINGER = { "ring1", "ring2" },
+  INVTYPE_TRINKET = { "trinket1", "trinket2" },
+  INVTYPE_WEAPON = { "mainhand" }, INVTYPE_WEAPONMAINHAND = { "mainhand" },
+  INVTYPE_2HWEAPON = { "mainhand" },
+  INVTYPE_WEAPONOFFHAND = { "offhand" }, INVTYPE_SHIELD = { "offhand" },
+  INVTYPE_HOLDABLE = { "offhand" },
+  INVTYPE_RANGED = { "relic" }, INVTYPE_RANGEDRIGHT = { "relic" },
+  INVTYPE_THROWN = { "relic" }, INVTYPE_RELIC = { "relic" },
+}
+
+-- "Usable" = an equipment card this character could wear right now:
+-- level requirement met and, when the license layer is on, a license for
+-- its slot owned (twin slots count either license). Drives the quiet
+-- climax-slot steering below.
+function TT.IsUsableEquipCard(row)
+  if (row.kind or "item") ~= "item" then return false end
+  if (row.rl or 0) > (UnitLevel("player") or 1) then return false end
+  local _, _, _, loc, _, classID = GetItemInfoInstant(row.i)
+  if classID ~= 2 and classID ~= 4 then return false end
+  local lics = TT.INVTYPE_LICENSES[loc]
+  if not lics then return false end
+  if not TT.LicenseLayerActive() then return true end
+  for _, slot in ipairs(lics) do
+    if TT.IsUnlocked(slot) then return true end
+  end
+  return false
+end
+
+-- A usable card near the rolled tier (fall back down, then up); nil when
+-- nothing usable exists in this pool at all.
+local function pickUsable(byTier, tier)
+  local order = {}
+  for t = tier, 1, -1 do order[#order + 1] = t end
+  for t = tier + 1, TT.MAX_RARITY do order[#order + 1] = t end
+  for _, t in ipairs(order) do
+    local bucket = byTier[t]
+    if bucket and #bucket > 0 then
+      for _ = 1, 40 do
+        local row = bucket[math.random(#bucket)]
+        if TT.IsUsableEquipCard(row) then return row, t end
+      end
+      local cands = {}
+      for _, row in ipairs(bucket) do
+        if TT.IsUsableEquipCard(row) then cands[#cands + 1] = row end
+      end
+      if #cands > 0 then return cands[math.random(#cands)], t end
+    end
+  end
+  return nil
+end
+
 -- Some tiers can be thin in a given type's pool (e.g. few creature epics):
 -- fall back to the nearest lower populated tier, then upward.
 local function pickCard(byTier, tier)
@@ -713,6 +777,7 @@ function TT.RollPack(packType)
   end
   local cards = {}
   local sawEpic = false
+  local eqPack = (packType == "equipment" or packType == "wild")
 
   for slot = 1, E.cardsPerPack do
     local odds = (god or slot == E.cardsPerPack) and E.bonusOdds or E.slotOdds
@@ -723,7 +788,19 @@ function TT.RollPack(packType)
         and TT.Profile().pity >= E.pityEpic and tier < 4 then
       tier = 4
     end
-    local row, actual = pickCard(byTier, tier)
+    local row, actual
+    -- climax-slot steering (equipment/wild): keep the last flip relevant
+    -- to what this character can actually wear (see TT.IsUsableEquipCard)
+    if slot == E.cardsPerPack and eqPack and TT.Run then
+      local since = TT.Run().packsSinceUsable or 0
+      if since >= TT.LICENSE.pityWindow - 1
+          or math.random() < TT.LICENSE.pityBias then
+        row, actual = pickUsable(byTier, tier)
+      end
+    end
+    if not row then
+      row, actual = pickCard(byTier, tier)
+    end
     if not row then return nil end
     if actual >= 4 then sawEpic = true end
     local foil = god or (math.random(E.foilChance) == 1)
@@ -779,6 +856,17 @@ function TT.PickPackType(packType)
       if row and row.r >= 4 then hasEpic = true end
     end
     p.pity = hasEpic and 0 or (p.pity + 1)
+  end
+  -- usable-drop bookkeeping (equipment/wild packs only; goods and
+  -- creature packs neither advance nor reset it)
+  if (packType == "equipment" or packType == "wild") and TT.Run then
+    local run = TT.Run()
+    local usable = false
+    for _, c in ipairs(pack.cards) do
+      local row = TT.cardIndex[c.k]
+      if row and TT.IsUsableEquipCard(row) then usable = true break end
+    end
+    run.packsSinceUsable = usable and 0 or ((run.packsSinceUsable or 0) + 1)
   end
   return true
 end
