@@ -1113,6 +1113,8 @@ end
 
 function TT.SetupForPlayer()
   TT.BuildPoolIndex()
+  local _, classToken = UnitClass("player")
+  if TT.BuildLicenseDeck then TT.BuildLicenseDeck(classToken) end
   TT.RegisterRoster()
   -- one-time 0.5.0 amnesty: hard enforcement replaces warn-only, so this
   -- character re-grandfathers what they're wearing before the rules bite

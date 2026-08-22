@@ -566,6 +566,8 @@ local overlay
 local function OverlayShowStage(stage)
   ui.selectStage:SetShown(stage == "select")
   ui.revealStage:SetShown(stage == "reveal")
+  if ui.drawStage then ui.drawStage:SetShown(stage == "draw") end
+  if ui.draftStage then ui.draftStage:SetShown(stage == "draft") end
 end
 
 local function UpdateRevealClickability()
@@ -849,6 +851,236 @@ local function EnterSelectStage()
   end)
 end
 
+---------------------------------------------------------------------------
+-- License faces + the draw (Challenge) and draft (League) stages. Both
+-- reuse the reveal-card widget; licenses paint gold with the license
+-- category's icon resolution, items paint through the normal pipeline.
+---------------------------------------------------------------------------
+
+local function SetCardFaceUpLicense(c, cardId)
+  local card = TT.licenseById and TT.licenseById[cardId]
+  if not card then return end
+  c:SetBackdropColor(0.08, 0.08, 0.10, 1)
+  c:SetBackdropBorderColor(GOLD.r, GOLD.g, GOLD.b)
+  c.back:Hide()
+  c.front:Show()
+  c.icon:SetTexture(TT.GetLicenseIcon(card))
+  c.icon:Show()
+  ClearCardModel(c)
+  c.pendingKey = nil
+  c.name:SetText(card.name)
+  c.name:SetTextColor(GOLD.r, GOLD.g, GOLD.b)
+  c.faceUp = true
+end
+
+local function LicenseCardTooltip(c, card)
+  GameTooltip:SetOwner(c, "ANCHOR_RIGHT")
+  GameTooltip:SetText(card.name, 1, 0.82, 0)
+  local kind = (card.type == "gear" and "Gear-slot license")
+    or (card.type == "talent" and ("Talent card (+" .. (card.points or 5) .. " points)"))
+    or (card.type == "profession" and "Profession license")
+    or (card.type == "general" and "Unlock")
+    or "Class ability license"
+  GameTooltip:AddLine(kind, 0.8, 0.8, 0.8)
+  if (card.minLevel or 1) > 1 then
+    GameTooltip:AddLine("Level " .. card.minLevel .. "+", 0.6, 0.6, 0.6)
+  end
+  GameTooltip:Show()
+end
+
+-- Challenge: three licenses face-up, keep one on click.
+local function BuildDrawStage(parent)
+  local stage = CreateFrame("Frame", nil, parent)
+  stage:SetAllPoints(parent)
+  ui.drawStage = stage
+
+  local title = CreateHeader(stage, "Choose ONE license - the rest go back in the deck")
+  title:SetPoint("TOP", 0, -26)
+
+  local W, H, GAP = 110, 190, 26
+  ui.drawCards = {}
+  for i = 1, 3 do
+    local c = CreateRevealCard(stage)
+    c:SetPoint("TOPLEFT", stage, "TOP",
+      (i - 2) * (W + GAP) - W / 2, -90)
+    local idx = i
+    c:SetScript("OnClick", function()
+      local run = TT.Run()
+      local pending = run.pendingDraw
+      local id = pending and pending.ids[idx]
+      if id and TT.ChooseLicense(id) then
+        overlay:Hide()
+      end
+    end)
+    c:SetScript("OnEnter", function(self)
+      local pending = TT.Run().pendingDraw
+      local card = pending and TT.licenseById[pending.ids[idx] or ""]
+      if card then LicenseCardTooltip(self, card) end
+    end)
+    c:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ui.drawCards[i] = c
+  end
+
+  ui.drawPutBack = CreateActionButton(stage, 180, 24, "Put the draw back",
+    function()
+      TT.UndoLicenseChoice()
+      if not TT.Run().pendingDraw then overlay:Hide() end
+      TT.Refresh()
+    end)
+  ui.drawPutBack:SetPoint("BOTTOM", 0, 20)
+end
+
+local function EnterDrawStage()
+  OverlayShowStage("draw")
+  local pending = TT.Run().pendingDraw
+  if not pending then overlay:Hide() return end
+  for i, c in ipairs(ui.drawCards) do
+    StopLoop("foil" .. tostring(c))
+    local id = pending.ids[i]
+    if id then
+      SetCardFaceUpLicense(c, id)
+      c:Show()
+      c:Enable()
+    else
+      c:Hide()
+    end
+  end
+  -- with the lock on, a shown draw must be resolved (DeckLocked rule)
+  ui.drawPutBack:SetShown(not TT.Profile().lockedMode)
+end
+
+-- League: five cards face-down, flip in any order, keep exactly one.
+local function DraftFlip(c, idx)
+  local run = TT.Run()
+  local pending = run.pendingDraft
+  if not pending or ui.draftLockout then return end
+  local slot = pending.slots[idx]
+  if not slot or (pending.flipped and pending.flipped[idx]) then return end
+  pending.flipped = pending.flipped or {}
+  pending.flipped[idx] = true
+
+  ui.draftLockout = true
+  local w = c:GetWidth()
+  StartTween(0.12, function(pr)
+    c:SetWidth(math.max(2, w * (1 - pr)))
+  end, function()
+    if slot.kind == "license" then
+      SetCardFaceUpLicense(c, slot.id)
+    else
+      SetCardFaceUp(c, { k = slot.k, f = slot.f })
+    end
+    StartTween(0.12, function(pr)
+      c:SetWidth(math.max(2, w * pr))
+    end, function()
+      c:SetWidth(w)
+      ui.draftLockout = false
+      if c.model and c.model:IsShown() and c.model.loaded then
+        CardModel_Frame(c.model)
+      end
+      local tier = (slot.kind == "item") and CardRarity(slot.k) or 0
+      if tier >= 4 or slot.f then
+        TT.PlaySoundKit("IG_QUEST_LOG_OPEN")
+      else
+        TT.PlaySoundKit("IG_MAINMENU_OPTION_CHECKBOX_ON")
+      end
+      ui.draftKeeps[idx]:Show()
+    end)
+  end)
+end
+
+local function BuildDraftStage(parent)
+  local stage = CreateFrame("Frame", nil, parent)
+  stage:SetAllPoints(parent)
+  ui.draftStage = stage
+
+  ui.draftTitle = CreateHeader(stage, "Draft pack - flip the cards, keep ONE")
+  ui.draftTitle:SetPoint("TOP", 0, -18)
+
+  local N, W, H, GAP = TT.LICENSE.draftSize, 110, 190, 14
+  local gridW = N * W + (N - 1) * GAP
+  ui.draftCards = {}
+  ui.draftKeeps = {}
+  for i = 1, N do
+    local c = CreateRevealCard(stage)
+    c:SetPoint("TOPLEFT", stage, "TOP", -gridW / 2 + (i - 1) * (W + GAP), -56)
+    local idx = i
+    c:SetScript("OnClick", function(self) DraftFlip(self, idx) end)
+    c:SetScript("OnEnter", function(self)
+      local pending = TT.Run().pendingDraft
+      local slot = pending and pending.slots[idx]
+      if slot and pending.flipped and pending.flipped[idx]
+          and slot.kind == "license" then
+        LicenseCardTooltip(self, TT.licenseById[slot.id])
+      end
+    end)
+    c:SetScript("OnLeave", function() GameTooltip:Hide() end)
+    ui.draftCards[i] = c
+
+    local keep = CreateActionButton(stage, 84, 22, "Keep", function()
+      if TT.DraftKeep(idx) then
+        for _, cc in ipairs(ui.draftCards) do
+          StopLoop("foil" .. tostring(cc))
+        end
+        overlay:Hide()
+        TT.Refresh()
+      end
+    end)
+    keep:SetPoint("TOP", c, "BOTTOM", 0, -8)
+    keep:Hide()
+    ui.draftKeeps[i] = keep
+  end
+
+  local sub = stage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  sub:SetPoint("BOTTOM", 0, 22)
+  sub:SetTextColor(0.55, 0.55, 0.55)
+  sub:SetText("The card you keep is yours - license or gear. The rest are gone for good.")
+end
+
+local function EnterDraftStage()
+  OverlayShowStage("draft")
+  local pending = TT.Run().pendingDraft
+  if not pending then overlay:Hide() return end
+  ui.draftLockout = false
+  for i, c in ipairs(ui.draftCards) do
+    StopLoop("foil" .. tostring(c))
+    local slot = pending.slots[i]
+    if slot then
+      c:Show()
+      c:Enable()
+      if pending.flipped and pending.flipped[i] then
+        if slot.kind == "license" then
+          SetCardFaceUpLicense(c, slot.id)
+        else
+          SetCardFaceUp(c, { k = slot.k, f = slot.f })
+        end
+        ui.draftKeeps[i]:Show()
+      else
+        SetCardFaceDown(c)
+        ui.draftKeeps[i]:Hide()
+      end
+    else
+      c:Hide()
+      ui.draftKeeps[i]:Hide()
+    end
+  end
+end
+
+function TT.UI_ShowDrawOverlay()
+  if not frame then return end
+  if not TT.Run().pendingDraw then return end
+  frame:Show()
+  overlay:Show()
+  EnterDrawStage()
+end
+
+function TT.UI_ShowDraftOverlay()
+  if not frame then return end
+  if not TT.Run().pendingDraft then return end
+  frame:Show()
+  overlay:Show()
+  EnterDraftStage()
+end
+
 local function BuildPackOverlay()
   overlay = CreateFrame("Frame", nil, frame, "BackdropTemplate")
   overlay:SetPoint("TOPLEFT", 4, -26)
@@ -862,6 +1094,8 @@ local function BuildPackOverlay()
 
   BuildSelectStage(overlay)
   BuildRevealStage(overlay)
+  BuildDrawStage(overlay)
+  BuildDraftStage(overlay)
 end
 
 function TT.UI_ShowPackOverlay()
