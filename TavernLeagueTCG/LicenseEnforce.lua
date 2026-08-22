@@ -357,7 +357,6 @@ function TT.IsProfessionLocked(profName)
   if key == false then return true end
   return not TT.IsUnlocked(key)
 end
-
 -- Shut the window on the next frame: closing one from inside its own SHOW
 -- event can catch the Blizzard UI mid-open.
 local function BlockTradeWindow(profName, close)
@@ -372,15 +371,35 @@ local function BlockTradeWindow(profName, close)
   TT.Warn(profName .. " is locked - you don't hold a profession license for it!")
 end
 
-local function OnTradeSkillShow()
-  local name = GetTradeSkillLine and GetTradeSkillLine()
-  BlockTradeWindow(name, CloseTradeSkill)
+-- The skill line is not always ready when the window announces itself -
+-- Classic answers "UNKNOWN" until the data lands - so this re-checks
+-- whatever is open, and the caller retries for a beat after a show.
+local function CheckOpenTradeWindows()
+  local checked = false
+  if TradeSkillFrame and TradeSkillFrame:IsShown() and GetTradeSkillLine then
+    local name = GetTradeSkillLine()
+    if name and name ~= "UNKNOWN" then
+      BlockTradeWindow(name, CloseTradeSkill)
+      checked = true
+    end
+  end
+  if CraftFrame and CraftFrame:IsShown() then
+    local name = (GetCraftDisplaySkillLine and GetCraftDisplaySkillLine())
+      or (GetCraftName and GetCraftName())
+    if name and name ~= "UNKNOWN" then
+      BlockTradeWindow(name, CloseCraft)
+      checked = true
+    end
+  end
+  return checked
 end
 
-local function OnCraftShow()
-  local name = (GetCraftDisplaySkillLine and GetCraftDisplaySkillLine())
-    or (GetCraftName and GetCraftName())
-  BlockTradeWindow(name, CloseCraft)
+local function CheckTradeWindowsSoon()
+  if CheckOpenTradeWindows() then return end
+  if not (C_Timer and C_Timer.After) then return end
+  for _, delay in ipairs({ 0.1, 0.3, 0.6 }) do
+    C_Timer.After(delay, CheckOpenTradeWindows)
+  end
 end
 
 ---------------------------------------------------------------------------
@@ -614,7 +633,9 @@ ef:RegisterEvent("SPELLS_CHANGED")
 ef:RegisterEvent("CHARACTER_POINTS_CHANGED")
 ef:RegisterEvent("BAG_UPDATE_DELAYED")
 ef:RegisterEvent("TRADE_SKILL_SHOW")
+ef:RegisterEvent("TRADE_SKILL_UPDATE")
 ef:RegisterEvent("CRAFT_SHOW")
+ef:RegisterEvent("CRAFT_UPDATE")
 ef:RegisterEvent("ADDON_LOADED")
 
 ef:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
@@ -653,11 +674,9 @@ ef:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
   elseif event == "BAG_UPDATE_DELAYED" then
     CheckBagViolations()
 
-  elseif event == "TRADE_SKILL_SHOW" then
-    OnTradeSkillShow()
-
-  elseif event == "CRAFT_SHOW" then
-    OnCraftShow()
+  elseif event == "TRADE_SKILL_SHOW" or event == "TRADE_SKILL_UPDATE"
+      or event == "CRAFT_SHOW" or event == "CRAFT_UPDATE" then
+    CheckTradeWindowsSoon()
 
   elseif event == "ADDON_LOADED" and arg1 == "Blizzard_TalentUI" then
     local tframe = _G.PlayerTalentFrame or _G.TalentFrame
