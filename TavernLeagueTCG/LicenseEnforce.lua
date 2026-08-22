@@ -279,23 +279,29 @@ end
 
 local PROFESSIONS = {
   -- key: "primary" for the two generic slots, else the license box.
-  -- world: cast on something out in the world rather than at a window,
-  --        so it can only be called out after the fact.
-  { key = "primary",  spells = { 2259 } },                    -- Alchemy
-  { key = "primary",  spells = { 2018 } },                    -- Blacksmithing
-  { key = "primary",  spells = { 7411 } },                    -- Enchanting
-  { key = "primary",  spells = { 4036 } },                    -- Engineering
-  { key = "primary",  spells = { 2366, 2383 }, world = true,  -- Herbalism,
-    aliases = { "Herbalism" } },                              -- + Find Herbs
-  { key = "primary",  spells = { 25229 } },                   -- Jewelcrafting
-  { key = "primary",  spells = { 2108 } },                    -- Leatherworking
-  { key = "primary",  spells = { 2575, 2580, 2656 },          -- Mining,
-    world = true },                                           -- Find Minerals, Smelting
-  { key = "primary",  spells = { 8613 }, world = true },      -- Skinning
-  { key = "primary",  spells = { 3908 } },                    -- Tailoring
-  { key = "cooking",  spells = { 2550 } },
-  { key = "firstaid", spells = { 3273 } },
-  { key = "fishing",  spells = { 7620 }, world = true },
+  -- world: worked on something out in the world rather than at a window.
+  -- aliases: the client does not always call a trade what its spell is
+  --   called - the cast bar reads "Herb Gathering" while the skill line
+  --   reads "Herbalism" - and no API hands over a skill line's name, so
+  --   both spellings are listed. English only, which costs a non-English
+  --   client nothing: the spell-derived names still do the real work.
+  { key = "primary",  spells = { 2259 }, aliases = { "Alchemy" } },
+  { key = "primary",  spells = { 2018 }, aliases = { "Blacksmithing" } },
+  { key = "primary",  spells = { 7411 }, aliases = { "Enchanting" } },
+  { key = "primary",  spells = { 4036 }, aliases = { "Engineering" } },
+  { key = "primary",  spells = { 2366, 2383 }, world = true,
+    aliases = { "Herbalism", "Herb Gathering", "Find Herbs" } },
+  { key = "primary",  spells = { 25229 }, aliases = { "Jewelcrafting" } },
+  { key = "primary",  spells = { 2108 }, aliases = { "Leatherworking" } },
+  { key = "primary",  spells = { 2575, 2580, 2656 }, world = true,
+    aliases = { "Mining", "Smelting", "Find Minerals" } },
+  { key = "primary",  spells = { 8613 }, world = true,
+    aliases = { "Skinning" } },
+  { key = "primary",  spells = { 3908 }, aliases = { "Tailoring" } },
+  { key = "cooking",  spells = { 2550 }, aliases = { "Cooking" } },
+  { key = "firstaid", spells = { 3273 }, aliases = { "First Aid" } },
+  { key = "fishing",  spells = { 7620 }, world = true,
+    aliases = { "Fishing" } },
 }
 
 local profKinds = nil     -- [any name for a trade] = "primary" | license key
@@ -388,6 +394,11 @@ function TT.IsProfessionLocked(profName, peek)
   if key == nil then return false end
   if key == false then return true end
   return not TT.IsUnlocked(key)
+end
+
+function TT.DumpProfNames()
+  if not profKinds then BuildProfLookup() end
+  return profKinds, profCanon, profWorld
 end
 
 -- Worked out in the world rather than at a window: gathering and fishing
