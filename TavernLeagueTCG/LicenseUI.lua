@@ -1,141 +1,320 @@
--- Tavern League TCG: the Tavern tab - the license deck browser, the
--- draw/draft launcher and (next update) the goals checklist and dungeon
--- tracker. Follows the Trade.lua pattern: UI.lua creates the page frame
--- and calls TT.License_BuildUI / TT.License_Refresh defensively.
+-- Tavern League TCG: the Tavern tab - DeckLocked's board, imported.
+-- Gear slots on the left, class abilities pooled by spec in the center
+-- (only what you've DRAWN appears - nothing is granted by leveling),
+-- talents / professions / general on the right, and Class Packs as the
+-- only way in. A second view holds the tavern goals and the dungeon
+-- tracker. UI.lua creates the page frame and calls TT.License_BuildUI /
+-- TT.License_Refresh defensively (the Trade.lua pattern).
 
 local ADDON, TT = ...
 
-local ui = {}
+local ui = {
+  gear = {},         -- [slotKey] = box
+  talents = {},      -- [1..13] = box
+  profs = {},        -- [profId] = box
+  general = {},      -- [generalId] = box
+  abilityPools = {}, -- [subspec] = { box, ... }
+}
+
 local GOLD = { r = 1, g = 0.82, b = 0 }
+local LOCKED_BORDER = { 0.67, 0, 0 }
+local UNLOCKED_BORDER = { 0, 0.67, 0 }
+
+local PANEL_BACKDROP = {
+  bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+  edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+  tile = true, tileSize = 16, edgeSize = 12,
+  insets = { left = 3, right = 3, top = 3, bottom = 3 },
+}
+
+local BOX_BACKDROP = {
+  bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+  edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+  edgeSize = 8,
+  insets = { left = 2, right = 2, top = 2, bottom = 2 },
+}
 
 ---------------------------------------------------------------------------
--- Deck browser: one small icon cell per license card, grouped by section.
--- Drawn cards glow, eligible cards wait in gray, locked cards sit dark.
+-- Widget helpers (DeckLocked's visual language: red = locked, green =
+-- earned, desaturated icons while waiting)
 ---------------------------------------------------------------------------
 
-local CELL, CELL_GAP, PER_ROW = 30, 4, 21
+local function SetBoxState(box, unlocked)
+  if unlocked then
+    box:SetBackdropBorderColor(unpack(UNLOCKED_BORDER))
+  else
+    box:SetBackdropBorderColor(unpack(LOCKED_BORDER))
+  end
+  if box.icon then
+    box.icon:SetDesaturated(not unlocked)
+    box.icon:SetAlpha(unlocked and 1 or 0.55)
+  end
+  if box.label then
+    if unlocked then
+      box.label:SetTextColor(0.3, 1, 0.3)
+    else
+      box.label:SetTextColor(0.8, 0.8, 0.8)
+    end
+  end
+end
 
-local function CreateDeckCell(parent)
+local function AttachTooltip(widget)
+  widget:SetScript("OnEnter", function(self)
+    if not self.tooltipText then return end
+    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
+    GameTooltip:SetText(self.tooltipText, 1, 1, 1)
+    if self.tooltipSub then
+      GameTooltip:AddLine(self.tooltipSub, 0.7, 0.7, 0.7)
+    end
+    GameTooltip:Show()
+  end)
+  widget:SetScript("OnLeave", function() GameTooltip:Hide() end)
+end
+
+local function CreatePanel(parent, w, h)
+  local f = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+  f:SetSize(w, h)
+  f:SetBackdrop(PANEL_BACKDROP)
+  f:SetBackdropColor(0.05, 0.05, 0.08, 0.9)
+  f:SetBackdropBorderColor(0.3, 0.3, 0.3)
+  return f
+end
+
+local function CreateHeader(parent, text)
+  local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  fs:SetText(text)
+  fs:SetTextColor(GOLD.r, GOLD.g, GOLD.b)
+  return fs
+end
+
+local function CreateIconBox(parent, size, tooltip)
   local b = CreateFrame("Button", nil, parent, "BackdropTemplate")
-  b:SetSize(CELL, CELL)
-  b:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8",
-    edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-  b:SetBackdropColor(0.05, 0.05, 0.08, 1)
+  b:SetSize(size, size)
+  b:SetBackdrop(BOX_BACKDROP)
+  b:SetBackdropColor(0.1, 0.1, 0.1, 0.9)
   b.icon = b:CreateTexture(nil, "ARTWORK")
   b.icon:SetPoint("TOPLEFT", 2, -2)
   b.icon:SetPoint("BOTTOMRIGHT", -2, 2)
   b.icon:SetTexCoord(0.07, 0.93, 0.07, 0.93)
-  b:SetScript("OnEnter", function(self)
-    local card = self.card
-    if not card then return end
-    GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-    GameTooltip:SetText(card.name, 1, 0.82, 0)
-    local state
-    if TT.IsDrawn(card.id) then
-      state = "|cff20ff20Earned|r"
-    elseif card.minLevel > (UnitLevel("player") or 1) then
-      state = ("Unlocks at level %d"):format(card.minLevel)
-    else
-      state = "In the deck - draw to earn it"
-    end
-    GameTooltip:AddLine(state, 0.8, 0.8, 0.8)
-    GameTooltip:Show()
-  end)
-  b:SetScript("OnLeave", function() GameTooltip:Hide() end)
+  b.tooltipText = tooltip
+  AttachTooltip(b)
+  SetBoxState(b, false)
   return b
 end
 
--- Lay the whole deck out once per login (the deck itself never changes
--- mid-session); Refresh only repaints states.
-local function BuildDeckGrid()
-  local grid = ui.deckGrid
-  ui.cells = ui.cells or {}
-  for _, c in ipairs(ui.cells) do c:Hide() end
-
-  local sections = {
-    { label = "GEAR SLOTS", match = function(c) return c.type == "gear" end },
-    { label = "TALENTS", match = function(c) return c.type == "talent" end },
-    { label = "PROFESSIONS & UNLOCKS",
-      match = function(c) return c.type == "profession" or c.type == "general" end },
-    { label = "CLASS ABILITIES", match = function(c) return c.type == "ability" end },
-  }
-
-  local maxLevel = TT.MAX_LEVEL or 60
-  local y = 0
-  local cellIdx = 0
-  ui.headers = ui.headers or {}
-  local headerIdx = 0
-
-  for _, sec in ipairs(sections) do
-    local cards = {}
-    for _, card in ipairs(TT.licenseCards or {}) do
-      -- gated cards and cards that can never be eligible on this client
-      -- (e.g. TBC talents on Era) don't exist here
-      if sec.match(card) and not TT.IsLicenseGated(card)
-          and card.minLevel <= maxLevel then
-        cards[#cards + 1] = card
-      end
-    end
-    if #cards > 0 then
-      headerIdx = headerIdx + 1
-      local h = ui.headers[headerIdx]
-      if not h then
-        h = grid:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-        ui.headers[headerIdx] = h
-      end
-      h:SetPoint("TOPLEFT", 0, -y)
-      h:SetText(sec.label)
-      h:SetTextColor(0.55, 0.5, 0.35)
-      h:Show()
-      y = y + 16
-
-      for i, card in ipairs(cards) do
-        cellIdx = cellIdx + 1
-        local cell = ui.cells[cellIdx]
-        if not cell then
-          cell = CreateDeckCell(grid)
-          ui.cells[cellIdx] = cell
-        end
-        local col = (i - 1) % PER_ROW
-        local row = math.floor((i - 1) / PER_ROW)
-        cell:ClearAllPoints()
-        cell:SetPoint("TOPLEFT", col * (CELL + CELL_GAP),
-          -(y + row * (CELL + CELL_GAP)))
-        cell.card = card
-        cell:Show()
-      end
-      y = y + (math.ceil(#cards / PER_ROW)) * (CELL + CELL_GAP) + 8
-    end
-  end
-  for i = headerIdx + 1, #ui.headers do ui.headers[i]:Hide() end
-  for i = cellIdx + 1, #ui.cells do ui.cells[i]:Hide() end
+local function CreateActionButton(parent, w, h, text, onClick)
+  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
+  b:SetSize(w, h)
+  b:SetText(text)
+  b:SetScript("OnClick", onClick)
+  return b
 end
 
-local function RefreshDeckGrid()
-  local level = UnitLevel("player") or 1
-  for _, cell in ipairs(ui.cells or {}) do
-    if cell:IsShown() and cell.card then
-      local card = cell.card
-      cell.icon:SetTexture(TT.GetLicenseIcon(card))
-      if TT.IsDrawn(card.id) then
-        cell.icon:SetDesaturated(false)
-        cell.icon:SetAlpha(1)
-        cell:SetBackdropBorderColor(GOLD.r, GOLD.g, GOLD.b)
-      elseif card.minLevel <= level then
-        cell.icon:SetDesaturated(true)
-        cell.icon:SetAlpha(0.65)
-        cell:SetBackdropBorderColor(0.35, 0.35, 0.4)
-      else
-        cell.icon:SetDesaturated(true)
-        cell.icon:SetAlpha(0.25)
-        cell:SetBackdropBorderColor(0.18, 0.18, 0.22)
-      end
+---------------------------------------------------------------------------
+-- Board: gear panel (left)
+---------------------------------------------------------------------------
+
+local function BuildGearPanel(board)
+  local panel = CreatePanel(board, 188, 448)
+  panel:SetPoint("TOPLEFT", 0, 0)
+
+  local header = CreateHeader(panel, "Gear")
+  header:SetPoint("TOP", 0, -8)
+
+  local leftSlots = { "head", "neck", "shoulders", "back", "chest", "wrists", "hands" }
+  local rightSlots = { "waist", "legs", "feet", "ring1", "ring2", "trinket1", "trinket2" }
+  local bottomSlots = { "mainhand", "offhand", "relic" }
+
+  local bySlot = {}
+  for _, card in ipairs(TT.licenseCards or {}) do
+    if card.type == "gear" then bySlot[card.slot] = card end
+  end
+
+  local function makeGearBox(slot, x, y)
+    local card = bySlot[slot]
+    if not card then return end
+    local b = CreateIconBox(panel, 40, card.name)
+    b.tooltipSub = "Card appears in your Class Packs at level " .. card.minLevel .. "."
+    b:SetPoint("TOPLEFT", x, y)
+    b.icon:SetTexture(TT.GetLicenseIcon(card))
+    b:SetScript("OnClick", function() TT.ToggleLicenseBox(slot) end)
+    ui.gear[slot] = b
+  end
+
+  for i, slot in ipairs(leftSlots) do
+    makeGearBox(slot, 34, -26 - (i - 1) * 46)
+  end
+  for i, slot in ipairs(rightSlots) do
+    makeGearBox(slot, 114, -26 - (i - 1) * 46)
+  end
+  for i, slot in ipairs(bottomSlots) do
+    makeGearBox(slot, 28 + (i - 1) * 46, -356)
+  end
+end
+
+---------------------------------------------------------------------------
+-- Board: abilities + Class Pack controls (center)
+---------------------------------------------------------------------------
+
+local function BuildAbilitiesPanel(board)
+  local panel = CreatePanel(board, 384, 448)
+  panel:SetPoint("TOPLEFT", 192, 0)
+
+  local header = CreateHeader(panel, "Abilities")
+  header:SetPoint("TOP", 0, -8)
+
+  -- sections come from the player's class specs; count abilities per
+  -- subspec so each pool is exactly big enough
+  local sections = TT.licenseSpecList or {}
+  local counts = {}
+  for _, section in ipairs(sections) do
+    counts[section.key] = 0
+  end
+  for _, card in ipairs(TT.licenseCards or {}) do
+    if card.type == "ability" and counts[card.subspec] then
+      counts[card.subspec] = counts[card.subspec] + 1
+    end
+  end
+
+  local PER_ROW = 12
+  local ICON_SIZE = 26
+  local y = -26
+  for _, section in ipairs(sections) do
+    local label = panel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    label:SetPoint("TOPLEFT", 12, y)
+    label:SetText(section.label)
+    label:SetTextColor(GOLD.r, GOLD.g, GOLD.b)
+    y = y - 15
+
+    ui.abilityPools[section.key] = {}
+    local rows = math.ceil(math.max(1, counts[section.key]) / PER_ROW)
+    for i = 1, counts[section.key] do
+      local col = (i - 1) % PER_ROW
+      local row = math.floor((i - 1) / PER_ROW)
+      local b = CreateIconBox(panel, ICON_SIZE)
+      b:SetPoint("TOPLEFT", 12 + col * (ICON_SIZE + 4), y - row * (ICON_SIZE + 4))
+      b:Hide()
+      ui.abilityPools[section.key][i] = b
+    end
+    y = y - rows * (ICON_SIZE + 4) - 6
+  end
+
+  -- Class Pack controls (a pack is issued every level; goals add bonus
+  -- packs; the rip happens in the pack overlay)
+  ui.openPackBtn = CreateActionButton(panel, 168, 26, "", function()
+    local run = TT.Run()
+    if run.pendingDraw then
+      TT.UI_ShowDrawOverlay()
+    elseif run.pendingDraft then
+      TT.UI_ShowDraftOverlay()
+    elseif TT.FormatFlag("drafts") then
+      if TT.BuildDraftPack() then TT.UI_ShowDraftOverlay() end
+    else
+      if TT.DrawLicenses(false) then TT.UI_ShowDrawOverlay() end
+    end
+  end)
+  ui.openPackBtn:SetPoint("BOTTOMLEFT", 12, 40)
+
+  ui.bonusPackBtn = CreateActionButton(panel, 120, 26, "", function()
+    if TT.DrawLicenses(true) then TT.UI_ShowDrawOverlay() end
+  end)
+  ui.bonusPackBtn:SetPoint("LEFT", ui.openPackBtn, "RIGHT", 8, 0)
+
+  ui.availableText = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  ui.availableText:SetPoint("LEFT", ui.bonusPackBtn, "RIGHT", 10, 0)
+  ui.availableText:SetTextColor(GOLD.r, GOLD.g, GOLD.b)
+
+  ui.undoBtn = CreateActionButton(panel, 120, 22, "Undo last pick", function()
+    TT.UndoLicenseChoice()
+    if TT.Run().pendingDraw then TT.UI_ShowDrawOverlay() end
+  end)
+  ui.undoBtn:SetPoint("BOTTOMLEFT", 12, 12)
+
+  ui.packHint = panel:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  ui.packHint:SetPoint("BOTTOMRIGHT", -12, 16)
+  ui.packHint:SetTextColor(0.55, 0.55, 0.55)
+end
+
+---------------------------------------------------------------------------
+-- Board: talents / professions / general (right)
+---------------------------------------------------------------------------
+
+local function BuildRightPanel(board)
+  local panel = CreatePanel(board, 196, 448)
+  panel:SetPoint("TOPLEFT", 580, 0)
+
+  local header = CreateHeader(panel, "Talents")
+  header:SetPoint("TOP", 0, -8)
+
+  local PER_ROW = 4
+  for i, card in ipairs(TT.licenseTalents or {}) do
+    local col = (i - 1) % PER_ROW
+    local row = math.floor((i - 1) / PER_ROW)
+    local b = CreateIconBox(panel, 38, card.name)
+    b.tooltipSub = "Card appears in your Class Packs at level " .. card.minLevel .. "."
+    b:SetPoint("TOPLEFT", 12 + col * 44, -24 - row * 44)
+    b.icon:SetTexture(card.icon)
+    local index = i
+    b:SetScript("OnClick", function() TT.ToggleLicenseBox("talent-" .. index) end)
+
+    local tp = b:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    tp:SetPoint("BOTTOM", 0, 1)
+    tp:SetText("+" .. (card.points or 5))
+    ui.talents[i] = b
+  end
+
+  ui.talentPoints = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  ui.talentPoints:SetPoint("TOP", 0, -206)
+  ui.talentPoints:SetTextColor(0.3, 1, 0.3)
+
+  local profHeader = CreateHeader(panel, "Professions")
+  profHeader:SetPoint("TOP", 0, -226)
+
+  local profs = {
+    { id = "prof-1",   name = "Profession 1", icon = "Interface\\Icons\\Trade_BlackSmithing" },
+    { id = "prof-2",   name = "Profession 2", icon = "Interface\\Icons\\Trade_Engineering" },
+    { id = "cooking",  name = "Cooking",      icon = "Interface\\Icons\\INV_Misc_Food_15" },
+    { id = "fishing",  name = "Fishing",      icon = "Interface\\Icons\\Trade_Fishing" },
+    { id = "firstaid", name = "First Aid",    icon = "Interface\\Icons\\Spell_Holy_SealOfSacrifice" },
+  }
+  for i, prof in ipairs(profs) do
+    local b = CreateIconBox(panel, 32, prof.name)
+    b:SetPoint("TOPLEFT", 10 + (i - 1) * 36, -244)
+    b.icon:SetTexture(prof.icon)
+    b:SetScript("OnClick", function() TT.ToggleLicenseBox(prof.id) end)
+    ui.profs[prof.id] = b
+  end
+
+  local genHeader = CreateHeader(panel, "General")
+  genHeader:SetPoint("TOP", 0, -292)
+
+  local generalRows = {
+    {
+      { id = "bag-1", name = "Bag Slot 1", icon = "Interface\\Icons\\INV_Misc_Bag_08" },
+      { id = "bag-2", name = "Bag Slot 2", icon = "Interface\\Icons\\INV_Misc_Bag_10" },
+      { id = "bag-3", name = "Bag Slot 3", icon = "Interface\\Icons\\INV_Misc_Bag_11" },
+      { id = "bag-4", name = "Bag Slot 4", icon = "Interface\\Icons\\INV_Misc_Bag_12" },
+    },
+    {
+      { id = "mount",             name = "Mount",             icon = "Interface\\Icons\\Ability_Mount_RidingHorse" },
+      { id = "epic-mount",        name = "Epic Mount",        icon = "Interface\\Icons\\Ability_Mount_Charger" },
+      { id = "flying-mount",      name = "Flying Mount",      icon = "Interface\\Icons\\Ability_Mount_Gryphon_01" },
+      { id = "epic-flying-mount", name = "Epic Flying Mount", icon = "Interface\\Icons\\Ability_Mount_NetherdrakeElite" },
+    },
+  }
+  for r, rowItems in ipairs(generalRows) do
+    for i, item in ipairs(rowItems) do
+      local b = CreateIconBox(panel, 36, item.name)
+      b:SetPoint("TOPLEFT", 22 + (i - 1) * 40, -310 - (r - 1) * 42)
+      b.icon:SetTexture(item.icon)
+      b:SetScript("OnClick", function() TT.ToggleLicenseBox(item.id) end)
+      ui.general[item.id] = b
     end
   end
 end
 
 ---------------------------------------------------------------------------
--- Goals checklist + dungeon tracker
+-- Goals checklist + dungeon tracker (second view)
 ---------------------------------------------------------------------------
 
 local function CreateTextRow(parent, width, onClick)
@@ -233,79 +412,60 @@ local function RefreshGoalsPanel()
 end
 
 ---------------------------------------------------------------------------
--- Page
+-- Page + refresh
 ---------------------------------------------------------------------------
 
 function TT.License_BuildUI(page)
   ui.page = page
 
   ui.header = page:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  ui.header:SetPoint("TOPLEFT", 12, -10)
+  ui.header:SetPoint("TOPLEFT", 12, -6)
   ui.header:SetTextColor(GOLD.r, GOLD.g, GOLD.b)
 
   ui.subHeader = page:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  ui.subHeader:SetPoint("TOPLEFT", ui.header, "BOTTOMLEFT", 0, -4)
+  ui.subHeader:SetPoint("LEFT", ui.header, "RIGHT", 14, 0)
   ui.subHeader:SetTextColor(0.7, 0.7, 0.7)
 
-  -- main action: draw (Challenge) or draft (League), or resume either
-  local function MakeButton(w, label, onClick)
-    local b = CreateFrame("Button", nil, page, "BackdropTemplate")
-    b:SetSize(w, 30)
-    b:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8x8",
-      edgeFile = "Interface\\Buttons\\WHITE8x8", edgeSize = 1 })
-    b:SetBackdropColor(0.12, 0.10, 0.05, 1)
-    b:SetBackdropBorderColor(GOLD.r, GOLD.g, GOLD.b)
-    b.text = b:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    b.text:SetPoint("CENTER")
-    b.SetText = function(self, t) self.text:SetText(t) end
-    b:SetScript("OnClick", onClick)
-    b:SetScript("OnDisable", function(self) self.text:SetTextColor(0.4, 0.4, 0.4) end)
-    b:SetScript("OnEnable", function(self) self.text:SetTextColor(1, 0.82, 0) end)
-    return b
-  end
-
-  ui.actionBtn = MakeButton(230, "", function()
-    local run = TT.Run()
-    if run.pendingDraw then
-      TT.UI_ShowDrawOverlay()
-    elseif run.pendingDraft then
-      TT.UI_ShowDraftOverlay()
-    elseif TT.FormatFlag("drafts") then
-      if TT.BuildDraftPack() then TT.UI_ShowDraftOverlay() end
-    else
-      if TT.DrawLicenses(false) then TT.UI_ShowDrawOverlay() end
-    end
-  end)
-  ui.actionBtn:SetPoint("TOPRIGHT", -12, -12)
-
-  ui.bonusBtn = MakeButton(150, "", function()
-    if TT.DrawLicenses(true) then TT.UI_ShowDrawOverlay() end
-  end)
-  ui.bonusBtn:SetPoint("TOPRIGHT", ui.actionBtn, "BOTTOMRIGHT", 0, -6)
-
-  ui.undoBtn = MakeButton(150, "Undo last pick", function()
-    TT.UndoLicenseChoice()
-    if TT.Run().pendingDraw then TT.UI_ShowDrawOverlay() end
-  end)
-  ui.undoBtn:SetPoint("TOPRIGHT", ui.bonusBtn, "BOTTOMRIGHT", 0, -6)
-
-  ui.viewToggle = MakeButton(170, "Goals & dungeons", function()
+  ui.viewToggle = CreateActionButton(page, 150, 22, "Goals & dungeons", function()
     ui.showGoals = not ui.showGoals
     TT.License_Refresh()
   end)
-  ui.viewToggle:SetPoint("TOPLEFT", 12, -60)
+  ui.viewToggle:SetPoint("TOPRIGHT", -10, -4)
 
-  ui.deckGrid = CreateFrame("Frame", nil, page)
-  ui.deckGrid:SetPoint("TOPLEFT", 14, -118)
-  ui.deckGrid:SetPoint("BOTTOMRIGHT", -14, 30)
+  ui.board = CreateFrame("Frame", nil, page)
+  ui.board:SetPoint("TOPLEFT", 6, -34)
+  ui.board:SetSize(776, 448)
+  BuildGearPanel(ui.board)
+  BuildAbilitiesPanel(ui.board)
+  BuildRightPanel(ui.board)
 
   ui.goalsPanel = CreateFrame("Frame", nil, page)
-  ui.goalsPanel:SetPoint("TOPLEFT", 14, -118)
+  ui.goalsPanel:SetPoint("TOPLEFT", 14, -40)
   ui.goalsPanel:SetPoint("BOTTOMRIGHT", -14, 10)
   ui.goalsPanel:Hide()
   BuildGoalsPanel(ui.goalsPanel)
+end
 
-  ui.built = false
+local function RefreshAbilities()
+  local run = TT.Run()
+  for subspec, pool in pairs(ui.abilityPools) do
+    local shown = 0
+    for _, card in ipairs(TT.licenseCards or {}) do
+      if card.type == "ability" and card.subspec == subspec and run.drawn[card.id] then
+        shown = shown + 1
+        local b = pool[shown]
+        if b then
+          b.icon:SetTexture(TT.GetLicenseIcon(card))
+          b.tooltipText = card.name
+          SetBoxState(b, true)
+          b:Show()
+        end
+      end
+    end
+    for i = shown + 1, #pool do
+      pool[i]:Hide()
+    end
+  end
 end
 
 function TT.License_Refresh()
@@ -313,70 +473,66 @@ function TT.License_Refresh()
   local run = TT.Run()
   local licActive = TT.LicenseLayerActive()
 
-  if not ui.built and TT.licenseCards then
-    BuildDeckGrid()
-    ui.built = true
-  end
+  -- Collection has no license layer: the tab IS the goals page there
+  local showGoals = ui.showGoals or not licActive
+  ui.board:SetShown(not showGoals)
+  ui.goalsPanel:SetShown(showGoals)
+  ui.viewToggle:SetShown(licActive)
+  ui.viewToggle:SetText(showGoals and "License board" or "Goals & dungeons")
 
-  -- deck view vs goals view
-  ui.deckGrid:SetShown(not ui.showGoals)
-  ui.goalsPanel:SetShown(ui.showGoals and true or false)
-  ui.viewToggle:SetText(ui.showGoals and "License deck" or "Goals & dungeons")
-  if ui.showGoals then
-    -- the dungeon tracker is a license-format feature; goals pay out
-    -- in every format
-    local showDungeons = licActive
-    ui.dungHead:SetShown(showDungeons)
+  if showGoals then
+    ui.dungHead:SetShown(licActive)
     for _, row in ipairs(ui.dungeonRows or {}) do
-      row:SetShown(showDungeons)
+      row:SetShown(licActive)
     end
     RefreshGoalsPanel()
   end
 
   local drawn = 0
   for _ in pairs(run.drawn) do drawn = drawn + 1 end
-  local total = 0
-  local maxLevel = TT.MAX_LEVEL or 60
-  for _, card in ipairs(TT.licenseCards or {}) do
-    if not TT.IsLicenseGated(card) and card.minLevel <= maxLevel then
-      total = total + 1
-    end
-  end
-  ui.header:SetText(("Licenses - %d of %d earned"):format(drawn, total))
+  ui.header:SetText(licActive and "The Board" or "Tavern Goals")
 
   if not licActive then
-    ui.subHeader:SetText("This format plays without the license layer - the deck is on display only.")
-    ui.actionBtn:Hide()
-    ui.bonusBtn:Hide()
-    ui.undoBtn:Hide()
-  elseif TT.FormatFlag("drafts") then
-    ui.subHeader:SetText(("Draft packs banked: |cffffd100%d|r - one per level; keep one card of five."):format(
-      run.draftPacks or 0))
-    ui.actionBtn:Show()
-    if run.pendingDraft or run.pendingDraw then
-      ui.actionBtn:SetText("Resume your draft")
-      ui.actionBtn:SetEnabled(true)
-    else
-      ui.actionBtn:SetText(("Open draft pack (%d banked)"):format(run.draftPacks or 0))
-      ui.actionBtn:SetEnabled((run.draftPacks or 0) > 0)
-    end
-    ui.bonusBtn:Hide()
-    ui.undoBtn:Hide()               -- draft picks are final
-  else
-    ui.subHeader:SetText(("Draws banked: |cffffd100%d|r  Bonus draws: |cffffd100%d|r"):format(
-      run.drawCredits or 0, run.bonusDraws or 0))
-    ui.actionBtn:Show()
-    if run.pendingDraw then
-      ui.actionBtn:SetText("Resume your draw")
-      ui.actionBtn:SetEnabled(true)
-    else
-      ui.actionBtn:SetText(("Draw licenses (%d banked)"):format(run.drawCredits or 0))
-      ui.actionBtn:SetEnabled((run.drawCredits or 0) > 0)
-    end
-    ui.bonusBtn:SetShown((run.bonusDraws or 0) > 0)
-    ui.bonusBtn:SetText(("Bonus draw (%d)"):format(run.bonusDraws or 0))
-    ui.undoBtn:SetShown(run.lastUndo ~= nil)
+    ui.subHeader:SetText("Goals pay a free card pack in this format.")
+    return
   end
 
-  RefreshDeckGrid()
+  local eligible = #TT.EligibleLicenses()
+  if TT.FormatFlag("drafts") then
+    ui.subHeader:SetText(("Draft packs: |cffffd100%d|r banked - one issued per level"):format(
+      run.draftPacks or 0))
+    if run.pendingDraft or run.pendingDraw then
+      ui.openPackBtn:SetText("Resume draft pack")
+      ui.openPackBtn:SetEnabled(true)
+    else
+      ui.openPackBtn:SetText(("Draft pack (%d)"):format(run.draftPacks or 0))
+      ui.openPackBtn:SetEnabled((run.draftPacks or 0) > 0)
+    end
+    ui.bonusPackBtn:Hide()
+    ui.undoBtn:Hide()          -- draft picks are final
+    ui.packHint:SetText("Keep ONE card of five - a license, or the gear itself.")
+  else
+    ui.subHeader:SetText(("Class Packs: |cffffd100%d|r banked - one issued per level"):format(
+      run.drawCredits or 0))
+    if run.pendingDraw then
+      ui.openPackBtn:SetText("Resume Class Pack")
+      ui.openPackBtn:SetEnabled(true)
+    else
+      ui.openPackBtn:SetText(("Class Pack (%d)"):format(run.drawCredits or 0))
+      ui.openPackBtn:SetEnabled((run.drawCredits or 0) > 0)
+    end
+    ui.bonusPackBtn:SetShown((run.bonusDraws or 0) > 0)
+    ui.bonusPackBtn:SetText(("Bonus Pack (%d)"):format(run.bonusDraws or 0))
+    ui.undoBtn:SetShown(run.lastUndo ~= nil)
+    ui.packHint:SetText("Three licenses per pack - learn ONE.")
+  end
+  ui.availableText:SetText("Cards left: " .. eligible)
+
+  for slot, b in pairs(ui.gear) do SetBoxState(b, run.unlocked[slot]) end
+  for i, b in ipairs(ui.talents) do SetBoxState(b, run.unlocked["talent-" .. i]) end
+  ui.talentPoints:SetText(("%d / %d points earned"):format(
+    TT.LicenseTalentPoints(), TT.LicenseMaxTalentPoints()))
+  for id, b in pairs(ui.profs) do SetBoxState(b, run.unlocked[id]) end
+  for id, b in pairs(ui.general) do SetBoxState(b, run.unlocked[id]) end
+  RefreshAbilities()
 end

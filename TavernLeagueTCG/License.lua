@@ -39,6 +39,33 @@ function TT.LicenseTalentPoints()
   return total
 end
 
+-- ...and the most this client's deck can ever award (51 Era / 61 TBC)
+function TT.LicenseMaxTalentPoints()
+  local total = 0
+  for _, card in ipairs(TT.licenseTalents or {}) do
+    if not TT.IsLicenseGated(card) and card.minLevel <= (TT.MAX_LEVEL or 60) then
+      total = total + (card.points or 5)
+    end
+  end
+  return total
+end
+
+-- Manual sandbox toggle for the board's boxes, DeckLocked-style: only
+-- while the lock is off; with the lock on, unlocks come from Class Packs.
+function TT.ToggleLicenseBox(key)
+  if TT.Profile().lockedMode then
+    TT.Warn("The lock is on - unlocks come from your Class Packs.")
+    return
+  end
+  local run = TT.Run()
+  if run.unlocked[key] then
+    run.unlocked[key] = nil
+  else
+    run.unlocked[key] = true
+  end
+  TT.Refresh()
+end
+
 ---------------------------------------------------------------------------
 -- Eligibility: undrawn, level met, not expansion-gated. Also stamps when
 -- each card FIRST became eligible - draft offers favor cards that have
@@ -137,11 +164,11 @@ function TT.DrawLicenses(isBonus)
   end
   if isBonus then
     if run.bonusDraws < 1 then
-      TT.Warn("No bonus draws available!")
+      TT.Warn("No bonus Class Packs available!")
       return false
     end
   elseif run.drawCredits < 1 then
-    TT.Warn("No draws available - level up to earn more!")
+    TT.Warn("No Class Packs banked - level up to earn more!")
     return false
   end
 
@@ -388,7 +415,7 @@ function TT.OnLevelUpLicenses(newLevel)
       tostring(newLevel or "?"), run.draftPacks))
   else
     run.drawCredits = run.drawCredits + 1
-    TT.Msg(("Ding! Level %s - |cffffd100you earned a license draw!|r (%d banked)"):format(
+    TT.Msg(("Ding! Level %s - |cffffd100a Class Pack has been issued!|r (%d banked)"):format(
       tostring(newLevel or "?"), run.drawCredits))
   end
   -- new level = newly eligible cards; stamp them now
@@ -520,9 +547,9 @@ function TT.GrantRetroLicenses()
     end
   else
     run.drawCredits = run.drawCredits + level
-    TT.LogEvent("event", ("%s joined Challenge at level %d: +%d retroactive draws."):format(
+    TT.LogEvent("event", ("%s joined Challenge at level %d: +%d retroactive Class Packs."):format(
       UnitName("player") or "?", level, level))
-    TT.Msg(("Level %d catch-up: |cffffd100+%d license draws banked!|r"):format(level, level))
+    TT.Msg(("Level %d catch-up: |cffffd100+%d Class Packs banked!|r"):format(level, level))
   end
   TT.Refresh()
 end

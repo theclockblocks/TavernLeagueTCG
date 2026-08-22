@@ -888,13 +888,14 @@ local function LicenseCardTooltip(c, card)
   GameTooltip:Show()
 end
 
--- Challenge: three licenses face-up, keep one on click.
+-- Challenge: the Class Pack rip - three license cards deal face-down,
+-- flip open in sequence, and you learn exactly ONE.
 local function BuildDrawStage(parent)
   local stage = CreateFrame("Frame", nil, parent)
   stage:SetAllPoints(parent)
   ui.drawStage = stage
 
-  local title = CreateHeader(stage, "Choose ONE license - the rest go back in the deck")
+  local title = CreateHeader(stage, "Class Pack - learn ONE license, the rest shuffle back in")
   title:SetPoint("TOP", 0, -26)
 
   local W, H, GAP = 110, 190, 26
@@ -904,7 +905,8 @@ local function BuildDrawStage(parent)
     c:SetPoint("TOPLEFT", stage, "TOP",
       (i - 2) * (W + GAP) - W / 2, -90)
     local idx = i
-    c:SetScript("OnClick", function()
+    c:SetScript("OnClick", function(self)
+      if not self.faceUp then return end   -- still dealing
       local run = TT.Run()
       local pending = run.pendingDraw
       local id = pending and pending.ids[idx]
@@ -913,6 +915,7 @@ local function BuildDrawStage(parent)
       end
     end)
     c:SetScript("OnEnter", function(self)
+      if not self.faceUp then return end
       local pending = TT.Run().pendingDraw
       local card = pending and TT.licenseById[pending.ids[idx] or ""]
       if card then LicenseCardTooltip(self, card) end
@@ -921,7 +924,12 @@ local function BuildDrawStage(parent)
     ui.drawCards[i] = c
   end
 
-  ui.drawPutBack = CreateActionButton(stage, 180, 24, "Put the draw back",
+  ui.drawHint = stage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  ui.drawHint:SetPoint("BOTTOM", 0, 52)
+  ui.drawHint:SetTextColor(0.5, 0.9, 0.5)
+  ui.drawHint:SetText("Click a card to learn it")
+
+  ui.drawPutBack = CreateActionButton(stage, 180, 24, "Put the pack back",
     function()
       TT.UndoLicenseChoice()
       if not TT.Run().pendingDraw then overlay:Hide() end
@@ -934,18 +942,40 @@ local function EnterDrawStage()
   OverlayShowStage("draw")
   local pending = TT.Run().pendingDraw
   if not pending then overlay:Hide() return end
+  TT.PlaySoundKit("IG_BACKPACK_OPEN")
   for i, c in ipairs(ui.drawCards) do
     StopLoop("foil" .. tostring(c))
     local id = pending.ids[i]
     if id then
-      SetCardFaceUpLicense(c, id)
+      SetCardFaceDown(c)
       c:Show()
       c:Enable()
+      -- staggered auto-flip: this is a pack, not a menu
+      local delay = 0.25 + (i - 1) * 0.22
+      if C_Timer and C_Timer.After then
+        C_Timer.After(delay, function()
+          if not c:IsVisible() or c.faceUp then return end
+          local stillPending = TT.Run().pendingDraw
+          if not stillPending or stillPending.ids[i] ~= id then return end
+          local w = c:GetWidth()
+          StartTween(0.12, function(pr)
+            c:SetWidth(math.max(2, w * (1 - pr)))
+          end, function()
+            SetCardFaceUpLicense(c, id)
+            TT.PlaySoundKit("IG_MAINMENU_OPTION_CHECKBOX_ON")
+            StartTween(0.12, function(pr)
+              c:SetWidth(math.max(2, w * pr))
+            end, function() c:SetWidth(w) end)
+          end)
+        end)
+      else
+        SetCardFaceUpLicense(c, id)
+      end
     else
       c:Hide()
     end
   end
-  -- with the lock on, a shown draw must be resolved (DeckLocked rule)
+  -- with the lock on, a dealt pack must be resolved (DeckLocked rule)
   ui.drawPutBack:SetShown(not TT.Profile().lockedMode)
 end
 
