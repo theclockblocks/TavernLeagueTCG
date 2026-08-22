@@ -775,6 +775,7 @@ ef:RegisterEvent("PLAYER_EQUIPMENT_CHANGED")
 ef:RegisterEvent("PLAYER_REGEN_ENABLED")
 ef:RegisterUnitEvent("UNIT_SPELLCAST_SUCCEEDED", "player")
 ef:RegisterUnitEvent("UNIT_SPELLCAST_START", "player")
+ef:RegisterUnitEvent("UNIT_SPELLCAST_SENT", "player")
 ef:RegisterEvent("ACTIONBAR_SLOT_CHANGED")
 ef:RegisterEvent("ACTIONBAR_PAGE_CHANGED")
 ef:RegisterEvent("UPDATE_SHAPESHIFT_FORM")
@@ -787,7 +788,7 @@ ef:RegisterEvent("CRAFT_SHOW")
 ef:RegisterEvent("CRAFT_UPDATE")
 ef:RegisterEvent("ADDON_LOADED")
 
-ef:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
+ef:SetScript("OnEvent", function(self, event, arg1, arg2, arg3, arg4)
   if not TT.db then return end
 
   if event == "PLAYER_ENTERING_WORLD" then
@@ -817,6 +818,11 @@ ef:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
 
   elseif event == "UNIT_SPELLCAST_START" then
     OnSpellcastStart(arg1, arg2, arg3)
+
+  -- SENT carries the target, so the spell id sits one along; some world
+  -- interactions raise it without a START
+  elseif event == "UNIT_SPELLCAST_SENT" then
+    OnSpellcastStart(arg1, nil, arg4)
 
   elseif event == "ACTIONBAR_SLOT_CHANGED" or event == "ACTIONBAR_PAGE_CHANGED"
       or event == "UPDATE_SHAPESHIFT_FORM" or event == "SPELLS_CHANGED" then
