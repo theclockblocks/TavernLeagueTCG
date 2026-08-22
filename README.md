@@ -12,6 +12,32 @@ only be equipped if your run owns its card.
 Works on **Classic Era** (1.15.x) and **TBC Anniversary** (2.5.x) from one
 addon folder. TBC-only cards are hidden on Era clients.
 
+## Three formats (new in 0.5.0)
+
+Every run now picks a format when it begins - permanently:
+
+- **Collection** - the trading card game described below: credits, packs,
+  the realm binder, trading. With the lock on, gear whose card the run
+  doesn't own is now **auto-unequipped**, not just called out.
+- **Challenge** - the permission game (evolved from the author's
+  [DeckLocked](https://github.com/theclockblocks/DeckLocked-App) addon,
+  whose progress imports 1:1): every level draws three **license cards** -
+  gear slots, class abilities, talent points, professions, bags - and you
+  keep one. Locked abilities gray out in the spellbook, locked slots
+  strip themselves, the talent frame gates on earned points. No credits,
+  no packs; each character earns its own permissions.
+- **League** - both games fused. Every level deals a **draft pack**:
+  license cards and level-appropriate gear side by side, keep exactly
+  **one**. "Battle Stance, or that blue sword?" The full credit economy
+  runs alongside, but licenses only ever come from your draft picks -
+  and wearing an item takes its slot license *and* its card.
+
+Auto-detected **tavern goals** (profession milestones, exalted rep,
+1,000 honorable kills, epic weapons, boss hunts, TBC heroics) pay a
+bonus draw, a free pack or a draft pack depending on the format, and a
+dungeon tracker logs every final-boss kill - shared with your group.
+Existing runs continue unchanged as Collection.
+
 ## Installation
 
 1. Download the latest release zip (or clone this repo).

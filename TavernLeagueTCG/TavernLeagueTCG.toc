@@ -1,6 +1,6 @@
 ## Interface: 11505, 11506, 11507, 11508, 11509, 20505, 20506
 ## Title: Tavern League TCG
-## Notes: Collect trading cards from packs earned by playing. Optional TCG Locked challenge mode: only equip gear whose card you own.
+## Notes: A TCG inside WoW Classic - three formats: Collection (packs, binder, trading), Challenge (the DeckLocked permission game) and League (draft packs: keep one card per level).
 ## Author: theclockblocks
 ## Version: 0.5.0-dev
 ## SavedVariables: TavernLeagueTCGDB
