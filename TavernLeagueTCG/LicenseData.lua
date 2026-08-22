@@ -33,6 +33,20 @@ TT.LICENSE = {
   -- the shared deck's Ranged/Relic license unlocks at 50 for most classes;
   -- classes whose ranged slot is core get it much earlier
   relicMinLevel     = { HUNTER = 1, MAGE = 20, WARLOCK = 20, PRIEST = 20 },
+  -- each class's "your class works now" cards (see the core steer in
+  -- License.lua): a warrior's stances, a healer's first heal, a caster's
+  -- first bolt
+  coreAbilities     = {
+    WARRIOR = { battlestance = true, defensivestance = true, berserkerstance = true },
+    PALADIN = { holylight = true },
+    HUNTER  = { raptorstrike = true },
+    ROGUE   = { sinisterstrike = true },
+    PRIEST  = { lesserheal = true },
+    SHAMAN  = { healingwave = true },
+    MAGE    = { fireball = true },
+    WARLOCK = { shadowbolt = true },
+    DRUID   = { healingtouch = true },
+  },
 }
 
 ---------------------------------------------------------------------------

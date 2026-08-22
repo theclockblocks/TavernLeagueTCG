@@ -17,7 +17,7 @@ local profileDefaults = {
   credits = 0,
   freePacks = 0,        -- banked packs from level-ups; consumed before credits
   stats = { xp = 0, kills = 0, quests = 0, levels = 0, packs = 0, gods = 0,
-    bosses = 0, honor = 0, sold = 0, trades = 0 },
+    bosses = 0, honor = 0, sold = 0, trades = 0, drafts = 0 },
   collection = {},      -- [cardKey] = { n = count, f = foilCount }
   firstSeen = {},       -- [cardKey] = time() of first pull
   fresh = {},           -- [cardKey] = true until viewed in the binder (NEW badge)
@@ -435,6 +435,7 @@ end
 local creditBlip = 0  -- prints a chat line for every ~500 earned
 
 function TT.AddCredits(amount, source)
+  if not TT.FormatFlag("credits") then return end   -- Challenge has no economy
   amount = math.floor(amount)
   if amount <= 0 then return end
   local p = TT.Profile()
@@ -481,11 +482,15 @@ function TT.OnLevelUp(newLevel)
   local p = TT.Profile()
   local name = UnitName("player")
   if p.roster[name] then p.roster[name].level = newLevel end
-  -- every character level grants a full pack (60-70 packs per toon leveled;
-  -- the contribution ledger keeps delete-reroll farming revocable)
-  p.freePacks = (p.freePacks or 0) + 1
-  TT.Msg(("Ding! Level %s - |cffffd100you earned a card pack!|r (%d banked)"):format(
-    tostring(newLevel or "?"), p.freePacks))
+  if TT.FormatFlag("packs") then
+    -- every character level grants a full pack (60-70 packs per toon leveled;
+    -- the contribution ledger keeps delete-reroll farming revocable)
+    p.freePacks = (p.freePacks or 0) + 1
+    TT.Msg(("Ding! Level %s - |cffffd100you earned a card pack!|r (%d banked)"):format(
+      tostring(newLevel or "?"), p.freePacks))
+  end
+  -- license formats: a draw (Challenge) or a draft pack (League) per ding
+  if TT.OnLevelUpLicenses then TT.OnLevelUpLicenses(newLevel) end
   TT.Refresh()
 end
 
@@ -561,6 +566,7 @@ end
 -- A qualifying boss died: pay the bounty, and the first one each day also
 -- banks a free pack.
 local function BossBounty(amount, label)
+  if not TT.FormatFlag("packs") then return end   -- a pack-economy faucet
   TT.AddCredits(amount, "bosses")
   local p = TT.Profile()
   local today = date("%Y-%m-%d")
@@ -729,6 +735,10 @@ end
 
 -- Pays for a pack; contents don't exist until the type is picked.
 function TT.BuyPack()
+  if not TT.FormatFlag("packs") then
+    TT.Msg("This run's format has no card packs.")
+    return false
+  end
   local p = TT.Profile()
   if p.pendingPack then
     TT.Warn("Finish opening your current pack first!")
@@ -782,6 +792,22 @@ function TT.RevealNext()
   return pack.revealed, pack.cards[pack.revealed]
 end
 
+-- One card enters the shared collection: counts, NEW tracking and the
+-- contribution ledger. Packs and League draft picks both land here.
+function TT.FoldCardIntoCollection(key, foil, charName)
+  local p = TT.Profile()
+  local col = p.collection[key] or { n = 0, f = 0 }
+  local isNew = (col.n + col.f) == 0
+  if isNew then
+    p.firstSeen[key] = time()
+    p.fresh[key] = true
+  end
+  if foil then col.f = col.f + 1 else col.n = col.n + 1 end
+  p.collection[key] = col
+  TT.AddContribution(charName, key, foil)
+  return isNew
+end
+
 function TT.FinishPack()
   local p = TT.Profile()
   local pack = p.pendingPack
@@ -790,15 +816,9 @@ function TT.FinishPack()
   local newCount = 0
 
   for _, c in ipairs(pack.cards) do
-    local col = p.collection[c.k] or { n = 0, f = 0 }
-    if (col.n + col.f) == 0 then
+    if TT.FoldCardIntoCollection(c.k, c.f, name) then
       newCount = newCount + 1
-      p.firstSeen[c.k] = time()
-      p.fresh[c.k] = true
     end
-    if c.f then col.f = col.f + 1 else col.n = col.n + 1 end
-    p.collection[c.k] = col
-    TT.AddContribution(name, c.k, c.f)
   end
 
   p.stats.packs = (p.stats.packs or 0) + 1
@@ -1021,6 +1041,7 @@ function TT.SetupForPlayer()
   TT.OnSkillsChanged()
   TT.SeedHonorKills()
   TT.GrantRetroPacks()
+  if TT.GrantRetroLicenses then TT.GrantRetroLicenses() end
 end
 
 -- One-time catch-up so the addon is worth installing on an existing
@@ -1030,6 +1051,9 @@ end
 -- and the grant is logged for the run's audit trail.
 function TT.GrantRetroPacks()
   if TT.cdb.retroPacks then return end
+  -- only consume the once-ever flag where packs exist: a character whose
+  -- first run is Challenge still gets this grant on a pack format later
+  if not TT.FormatFlag("packs") then return end
   TT.cdb.retroPacks = true
   local level = UnitLevel("player") or 1
   local grant = math.max(0, level - 1)
