@@ -219,10 +219,6 @@ local function BuildAbilitiesPanel(board)
   end)
   ui.bonusPackBtn:SetPoint("LEFT", ui.openPackBtn, "RIGHT", 8, 0)
 
-  ui.availableText = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-  ui.availableText:SetPoint("LEFT", ui.bonusPackBtn, "RIGHT", 10, 0)
-  ui.availableText:SetTextColor(GOLD.r, GOLD.g, GOLD.b)
-
   ui.undoBtn = CreateActionButton(panel, 120, 22, "Undo last pick", function()
     TT.UndoLicenseChoice()
     if TT.Run().pendingDraw then TT.UI_ShowDrawOverlay() end
@@ -526,7 +522,6 @@ function TT.License_Refresh()
     return
   end
 
-  local eligible = #TT.EligibleLicenses()
   if TT.FormatFlag("drafts") then
     ui.subHeader:SetText(("Draft packs: |cffffd100%d|r banked - one issued per level"):format(
       run.draftPacks or 0))
@@ -555,7 +550,6 @@ function TT.License_Refresh()
     ui.undoBtn:SetShown(run.lastUndo ~= nil)
     ui.packHint:SetText("Three licenses per pack - learn ONE.")
   end
-  ui.availableText:SetText("Cards left: " .. eligible)
 
   for slot, b in pairs(ui.gear) do SetBoxState(b, run.unlocked[slot]) end
   for i, b in ipairs(ui.talents) do SetBoxState(b, run.unlocked["talent-" .. i]) end
