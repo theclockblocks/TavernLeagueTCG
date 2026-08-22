@@ -371,25 +371,24 @@ local function BlockTradeWindow(profName, close)
   TT.Warn(profName .. " is locked - you don't hold a profession license for it!")
 end
 
--- The skill line is not always ready when the window announces itself -
--- Classic answers "UNKNOWN" until the data lands - so this re-checks
--- whatever is open, and the caller retries for a beat after a show.
+-- Never gate this on the frames: Blizzard_TradeSkillUI and Blizzard_CraftUI
+-- load on demand, so TradeSkillFrame is still nil the first time a trade
+-- announces itself. The APIs answer regardless and name no line - Classic
+-- says "UNKNOWN" - while nothing is open, which is gate enough. The line
+-- is also not always ready at SHOW, hence the caller's retries.
 local function CheckOpenTradeWindows()
   local checked = false
-  if TradeSkillFrame and TradeSkillFrame:IsShown() and GetTradeSkillLine then
-    local name = GetTradeSkillLine()
-    if name and name ~= "UNKNOWN" then
-      BlockTradeWindow(name, CloseTradeSkill)
-      checked = true
-    end
+  local name = GetTradeSkillLine and GetTradeSkillLine()
+  if name and name ~= "UNKNOWN" and name ~= "" then
+    BlockTradeWindow(name, CloseTradeSkill)
+    checked = true
   end
-  if CraftFrame and CraftFrame:IsShown() then
-    local name = (GetCraftDisplaySkillLine and GetCraftDisplaySkillLine())
-      or (GetCraftName and GetCraftName())
-    if name and name ~= "UNKNOWN" then
-      BlockTradeWindow(name, CloseCraft)
-      checked = true
-    end
+  local craft = (GetCraftDisplaySkillLine and GetCraftDisplaySkillLine())
+    or (GetCraftName and GetCraftName())
+  if craft and craft ~= "UNKNOWN" and craft ~= ""
+      and (not CraftFrame or CraftFrame:IsShown()) then
+    BlockTradeWindow(craft, CloseCraft)
+    checked = true
   end
   return checked
 end
