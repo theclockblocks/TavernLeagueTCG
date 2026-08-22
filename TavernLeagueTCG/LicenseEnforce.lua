@@ -401,6 +401,21 @@ local function CheckTradeWindowsSoon()
   end
 end
 
+-- Second line of defence, independent of the trade events: once Blizzard's
+-- load-on-demand trade UI exists, every OnShow re-runs the check. Whatever
+-- route opened the window, this one sees it.
+local hookedFrames = {}
+
+local function HookTradeFrames()
+  for _, name in ipairs({ "TradeSkillFrame", "CraftFrame" }) do
+    local f = _G[name]
+    if f and not hookedFrames[name] then
+      hookedFrames[name] = true
+      f:HookScript("OnShow", CheckTradeWindowsSoon)
+    end
+  end
+end
+
 ---------------------------------------------------------------------------
 -- Spellbook: gray + block locked spells
 ---------------------------------------------------------------------------
@@ -642,6 +657,7 @@ ef:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
 
   if event == "PLAYER_ENTERING_WORLD" then
     TT.LicenseEnforce_Update()
+    HookTradeFrames()
     if SpellBookFrame then
       SpellBookFrame:HookScript("OnShow", function() bookTicker:Show() end)
       SpellBookFrame:HookScript("OnHide", function() bookTicker:Hide() end)
@@ -677,10 +693,14 @@ ef:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
       or event == "CRAFT_SHOW" or event == "CRAFT_UPDATE" then
     CheckTradeWindowsSoon()
 
-  elseif event == "ADDON_LOADED" and arg1 == "Blizzard_TalentUI" then
-    local tframe = _G.PlayerTalentFrame or _G.TalentFrame
-    if tframe then
-      tframe:HookScript("OnShow", UpdateTalentGate)
+  elseif event == "ADDON_LOADED" then
+    if arg1 == "Blizzard_TalentUI" then
+      local tframe = _G.PlayerTalentFrame or _G.TalentFrame
+      if tframe then
+        tframe:HookScript("OnShow", UpdateTalentGate)
+      end
+    else
+      HookTradeFrames()
     end
   end
 end)
