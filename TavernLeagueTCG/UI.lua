@@ -979,7 +979,7 @@ local function EnterDrawStage()
   ui.drawPutBack:Hide()
 end
 
--- League: five cards face-down, flip in any order, keep exactly one.
+-- League: five license cards face-down, flip in any order, keep exactly one.
 local function DraftFlip(c, idx)
   local run = TT.Run()
   local pending = run.pendingDraft
@@ -1063,7 +1063,7 @@ local function BuildDraftStage(parent)
   local sub = stage:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
   sub:SetPoint("BOTTOM", 0, 22)
   sub:SetTextColor(0.55, 0.55, 0.55)
-  sub:SetText("The card you keep is yours - license or gear. The rest are gone for good.")
+  sub:SetText("The license you keep is yours. The rest are gone for good.")
 end
 
 local function EnterDraftStage()
@@ -1653,10 +1653,10 @@ local FORMAT_PICKS = {
       .. "only gear whose card the run owns may be worn - now enforced "
       .. "for real." },
   { key = "league", title = "League",
-    body = "Both games fused. Every level deals a DRAFT PACK: licenses "
-      .. "and gear side by side, and you keep exactly ONE card.\n\nThe "
-      .. "full credit economy runs alongside; licenses only ever come "
-      .. "from your draft picks." },
+    body = "Both games fused. Every level deals a DRAFT PACK of five "
+      .. "licenses, and you keep exactly ONE.\n\nThe full credit economy "
+      .. "runs alongside for gear cards; licenses only ever come from "
+      .. "your draft picks." },
 }
 
 local function BuildFormatPicker()

@@ -20,12 +20,7 @@ local ICON = "Interface\\Icons\\"
 
 TT.LICENSE = {
   drawChoices       = 3,     -- Challenge: licenses shown per draw, keep 1
-  draftSize         = 5,     -- League: cards per draft pack, keep 1
-  draftLicenseSlots = 2,     -- of draftSize; the rest are item cards
-  draftSlotOdds     = { 600, 280, 95, 25, 0 },   -- item slots (per mille)
-  draftClimaxOdds   = { 0, 600, 300, 90, 10 },   -- last item slot
-  draftFoilChance   = 20,    -- 1 in N per draft card
-  draftIlvlWindow   = 15,    -- item slots: itemLevel >= playerLevel - N
+  draftSize         = 5,     -- League: license offers per draft pack, keep 1
   pityWindow        = 5,     -- internal pack-roll bookkeeping (see Core)
   pityBias          = 0.30,
   goalRewards       = { challenge = "bonusDraw", collection = "freePack",

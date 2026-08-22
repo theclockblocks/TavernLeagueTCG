@@ -249,57 +249,11 @@ function TT.UndoLicenseChoice()
 end
 
 ---------------------------------------------------------------------------
--- League: draft packs. Five cards - license offers plus level-appropriate
--- gear - and the player keeps EXACTLY ONE. Licenses only ever come from
--- these picks; spending and rolling both persist, so relogs resume.
+-- League: draft packs. Five license offers, and the player keeps EXACTLY
+-- ONE. Gear never appears here - item cards belong to binder packs alone,
+-- so a draft is purely the license deck. Rolling and spending both
+-- persist, so relogs resume the live pack.
 ---------------------------------------------------------------------------
-
-local function rollTier(odds)
-  local roll = math.random(1000)
-  local acc = 0
-  for tier = 1, TT.MAX_RARITY do
-    acc = acc + (odds[tier] or 0)
-    if roll <= acc then return tier end
-  end
-  return 1
-end
-
--- A level-appropriate equipment card: requiredLevel met, itemLevel close
--- to current, and an actual wearable (no shirts/tabards). Tier falls back
--- down then up when a bracket is thin at this level.
-local function DraftItemOk(row, level)
-  if (row.kind or "item") ~= "item" then return false end
-  if (row.rl or 0) > level then return false end
-  if (row.il or 0) < level - TT.LICENSE.draftIlvlWindow then return false end
-  local _, _, _, loc = GetItemInfoInstant(row.i)
-  if loc == "INVTYPE_BODY" or loc == "INVTYPE_TABARD" or loc == "" then
-    return false
-  end
-  return true
-end
-
-local function PickDraftItem(tier, level)
-  local byTier = TT.poolByType and TT.poolByType.equipment
-  if not byTier then return nil end
-  local order = {}
-  for t = tier, 1, -1 do order[#order + 1] = t end
-  for t = tier + 1, TT.MAX_RARITY do order[#order + 1] = t end
-  for _, t in ipairs(order) do
-    local bucket = byTier[t]
-    if bucket and #bucket > 0 then
-      for _ = 1, 40 do
-        local row = bucket[math.random(#bucket)]
-        if DraftItemOk(row, level) then return row end
-      end
-      local cands = {}
-      for _, row in ipairs(bucket) do
-        if DraftItemOk(row, level) then cands[#cands + 1] = row end
-      end
-      if #cands > 0 then return cands[math.random(#cands)] end
-    end
-  end
-  return nil
-end
 
 function TT.BuildDraftPack()
   local run = TT.Run()
@@ -313,10 +267,10 @@ function TT.BuildDraftPack()
   local level = UnitLevel("player") or 1
   local L = TT.LICENSE
   local eligible = TT.EligibleLicenses()
-  local slots = {}
 
-  -- license offers: the core steer first, then weighted by how long each
-  -- card has been waiting since it became eligible
+  -- the core steer first, then weighted by how long each card has been
+  -- waiting since it became eligible; the pack simply runs short once
+  -- the deck thins out late in a run
   local picks = {}
   local forced = CoreForcedLicense(eligible)
   if forced then picks[#picks + 1] = forced end
@@ -324,7 +278,7 @@ function TT.BuildDraftPack()
   for _, card in ipairs(eligible) do
     if card ~= forced then cands[#cands + 1] = card end
   end
-  while #picks < L.draftLicenseSlots and #cands > 0 do
+  while #picks < L.draftSize and #cands > 0 do
     local total = 0
     for _, card in ipairs(cands) do
       total = total + (level - (run.eligibleSince[card.id] or level) + 1)
@@ -340,23 +294,14 @@ function TT.BuildDraftPack()
       end
     end
   end
-  for _, card in ipairs(picks) do
-    slots[#slots + 1] = { kind = "license", id = card.id }
+  if #picks == 0 then
+    TT.Warn("Nothing left to draft - every license you can use is drawn.")
+    return false
   end
 
-  -- item slots fill the rest (all of it, late-game, once the deck runs dry)
-  local nItems = L.draftSize - #slots
-  for i = 1, nItems do
-    local odds = (i == nItems) and L.draftClimaxOdds or L.draftSlotOdds
-    local row = PickDraftItem(rollTier(odds), level)
-    if row then
-      slots[#slots + 1] = { kind = "item", k = TT.CardKey(row),
-        f = (math.random(L.draftFoilChance) == 1) or nil }
-    end
-  end
-  if #slots == 0 then
-    TT.Warn("Nothing left to draft!")
-    return false
+  local slots = {}
+  for _, card in ipairs(picks) do
+    slots[#slots + 1] = { kind = "license", id = card.id }
   end
 
   run.draftPacks = run.draftPacks - 1

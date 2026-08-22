@@ -530,7 +530,7 @@ function TT.License_Refresh()
     end
     ui.bonusPackBtn:Hide()
     ui.undoBtn:Hide()          -- draft picks are final
-    ui.packHint:SetText("Keep ONE card of five - a license, or the gear itself.")
+    ui.packHint:SetText("Keep ONE license of five. Gear cards come from binder packs.")
   else
     ui.subHeader:SetText(("Class Packs: |cffffd100%d|r banked - one issued per level"):format(
       run.drawCredits or 0))
