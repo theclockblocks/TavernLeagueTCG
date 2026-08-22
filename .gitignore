@@ -11,3 +11,8 @@ tools/report_excluded.csv
 
 # Release build output
 release/
+
+# npm dev tooling (luaparse syntax checks)
+node_modules/
+package.json
+package-lock.json

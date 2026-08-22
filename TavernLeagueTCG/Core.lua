@@ -10,6 +10,9 @@ local ADDON, TT = ...
 --   TavernLeagueTCGCharDB   (per character) - toon-local bookkeeping
 ---------------------------------------------------------------------------
 
+-- Adding a profile key? TT.DisableHardmode merges hardmode profiles into
+-- the realm run field by field - new keys need an explicit merge line
+-- there or they silently vanish when a toon leaves Hardmode.
 local profileDefaults = {
   credits = 0,
   freePacks = 0,        -- banked packs from level-ups; consumed before credits
@@ -36,6 +39,8 @@ local charDefaults = {
   lastXPMax = nil,
   skillRanks = {},      -- [skillName] = last seen rank (diff base for skill credits)
   retroPacks = false,   -- one-time level-catchup pack grant done
+  runs = {},            -- [runKey] = this character's license-layer state (TT.Run)
+  retroLicense = {},    -- [format] = true, one-time draw/draft catch-up done
   minimapAngle = 200,
   minimapHide = false,
   binder = { own = "all", rarity = 0, bucket = "all", search = "", page = 1 },
@@ -68,6 +73,31 @@ function TT.InitDB()
   applyDefaults(TavernLeagueTCGCharDB, charDefaults)
   TavernLeagueTCGCharDB.schema = TavernLeagueTCGCharDB.schema or 1
   TT.cdb = TavernLeagueTCGCharDB
+
+  TT.MigrateDB()
+end
+
+-- Schema migrations: additive only, idempotent, and no v1 key is ever
+-- renamed or deleted - a downgraded client must still find its data.
+function TT.MigrateDB()
+  local db, cdb = TT.db, TT.cdb
+  if db.schema < 2 then
+    -- formats arrived in 0.5.0; every pre-existing run IS the old game
+    for _, bucket in pairs({ db.realms, db.hardmode }) do
+      for _, p in pairs(bucket) do
+        p.format = p.format or "collection"
+      end
+    end
+    db.schema = 2
+  end
+  if cdb.schema < 2 then
+    cdb.runs = cdb.runs or {}
+    -- 0.5.0 turns warn-only item locks into hard enforcement; the amnesty
+    -- (consumed in SetupForPlayer) re-grandfathers what this character is
+    -- wearing so the upgrade never strips anyone on login
+    cdb.amnestyPending = true
+    cdb.schema = 2
+  end
 end
 
 local function ensureProfile(bucket, key)
@@ -95,6 +125,56 @@ function TT.ProfileLabel()
     return "Hardmode: " .. TT.RealmKey() .. "-" .. (UnitName("player") or "?")
   end
   return "Realm: " .. TT.RealmKey()
+end
+
+---------------------------------------------------------------------------
+-- Per-character run state (the license layer). The binder is shared per
+-- realm, but permissions are earned per character: TT.Run() is this
+-- character's license progress for the ACTIVE run. Never cache the result -
+-- hardmode toggles change which run is active mid-session.
+---------------------------------------------------------------------------
+
+local runDefaults = {
+  drawn = {},            -- [licenseCardId] = true, every license taken
+  unlocked = {},         -- [boxKey] = true ("head", "bag-2", "talent-4", "cooking", ...)
+  drawCredits = 0,       -- Challenge: banked 3-card draws
+  bonusDraws = 0,        -- Challenge: goal payouts
+  draftPacks = 0,        -- League: banked draft packs
+  eligibleSince = {},    -- [licenseCardId] = level it first became eligible
+  packsSinceUsable = 0,  -- internal pack-roll bookkeeping
+  goals = {},            -- [goalId] = true
+  dungeons = {},         -- [dungeonName] = true
+  dungeonsHeroic = {},   -- [dungeonName] = true (TBC heroic clears)
+  -- pendingDraw / pendingDraft persist an in-progress draw or draft pack
+  -- across relogs (no defaults: absent until one is live)
+}
+
+function TT.RunKey()
+  if TT.cdb and TT.cdb.hardmode then
+    return "hard:" .. TT.RealmKey() .. "-" .. (UnitName("player") or "?")
+  end
+  return "realm:" .. TT.RealmKey()
+end
+
+function TT.Run()
+  local runs = TT.cdb.runs
+  local key = TT.RunKey()
+  runs[key] = runs[key] or {}
+  applyDefaults(runs[key], runDefaults)
+  return runs[key]
+end
+
+-- The format is picked once, when a run begins, and is immutable: a
+-- different format means a new Hardmode run or a retired profile.
+function TT.SetFormat(fmt)
+  local p = TT.Profile()
+  if p.format ~= nil or not TT.FORMATS[fmt] then return false end
+  p.format = fmt
+  TT.LogEvent("event", ("%s chose the %s format for %s."):format(
+    UnitName("player") or "?", TT.FORMATS[fmt].label, TT.ProfileLabel()))
+  TT.Msg(("Format locked in: |cffffd100%s|r."):format(TT.FORMATS[fmt].label))
+  TT.Refresh()
+  return true
 end
 
 ---------------------------------------------------------------------------
@@ -836,6 +916,15 @@ function TT.DisableHardmode()
   for stat, v in pairs(hp.stats) do
     rp.stats[stat] = (rp.stats[stat] or 0) + v
   end
+  -- drought protection carries over conservatively; the daily-pack stamp
+  -- keeps whichever run claimed a boss most recently (ISO dates compare)
+  rp.pity = math.max(rp.pity or 0, hp.pity or 0)
+  if (hp.lastDailyPack or "") > (rp.lastDailyPack or "") then
+    rp.lastDailyPack = hp.lastDailyPack
+  end
+  -- license-layer state does NOT merge: cdb.runs["hard:..."] simply goes
+  -- dormant - the realm run has its own per-character entry, and the two
+  -- runs may not even share a format
 
   TT.db.hardmode[TT.RealmKey() .. "-" .. name] = nil
   TT.cdb.lockSeen = false
@@ -913,6 +1002,16 @@ end
 function TT.SetupForPlayer()
   TT.BuildPoolIndex()
   TT.RegisterRoster()
+  -- one-time 0.5.0 amnesty: hard enforcement replaces warn-only, so this
+  -- character re-grandfathers what they're wearing before the rules bite
+  if TT.cdb.amnestyPending then
+    TT.cdb.amnestyPending = nil
+    if TT.Profile().lockedMode then
+      TT.cdb.lockSeen = false   -- Enforce re-snapshots on entering world
+      TT.LogEvent("event", (UnitName("player") or "?") ..
+        " re-grandfathered equipped items (v0.5.0 enforcement upgrade).")
+    end
+  end
   -- seed XP bookkeeping so the first PLAYER_XP_UPDATE doesn't mis-delta
   if TT.cdb.lastXP == nil then
     TT.cdb.lastXP = UnitXP("player")
@@ -1044,7 +1143,9 @@ SlashCmdList.TAVERNLEAGUETCG = function(msg)
   elseif cmd == "status" then
     local p = TT.Profile()
     local owned, foils = TT.OwnedCounts()
-    TT.Msg(TT.ProfileLabel() .. (p.lockedMode and "  |cffff4444[LOCKED]|r" or ""))
+    local fmt = p.format and TT.FORMATS[p.format]
+    TT.Msg(TT.ProfileLabel() .. (fmt and ("  [" .. fmt.label .. "]") or "")
+      .. (p.lockedMode and "  |cffff4444[LOCKED]|r" or ""))
     TT.Msg(("Credits: %s  |  Free packs: %d  |  Packs opened: %d (god: %d)  |  Trades: %d  |  Pity: %d/%d"):format(
       TT.FormatNumber(p.credits), p.freePacks or 0, p.stats.packs or 0, p.stats.gods or 0,
       p.stats.trades or 0, p.pity, TT.ECON.pityEpic))

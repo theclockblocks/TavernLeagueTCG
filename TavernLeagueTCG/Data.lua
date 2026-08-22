@@ -60,6 +60,34 @@ TT.ECON = {
 }
 
 ---------------------------------------------------------------------------
+-- Formats. A run picks one when it begins and never changes it:
+--   challenge  - the permission game only: license cards, draws, hard
+--                enforcement. No credits, packs, binder or trading.
+--   collection - the TCG only: today's game, with hard item locks.
+--   league     - both layers fused: draft packs + the full economy.
+-- Code asks TT.FormatFlag("...") for capabilities - never compare the
+-- format string at call sites.
+---------------------------------------------------------------------------
+
+TT.FORMATS = {
+  challenge  = { label = "Challenge",  packs = false, binder = false, trade = false,
+                 credits = false, licenses = true,  drafts = false, itemEnforce = false },
+  collection = { label = "Collection", packs = true,  binder = true,  trade = true,
+                 credits = true,  licenses = false, drafts = false, itemEnforce = true },
+  league     = { label = "League",     packs = true,  binder = true,  trade = true,
+                 credits = true,  licenses = true,  drafts = true,  itemEnforce = true },
+}
+
+-- Capability lookup for the active run. Profiles from before formats
+-- existed (and any not-yet-picked edge) behave as Collection - that IS
+-- the pre-0.5.0 game.
+function TT.FormatFlag(name)
+  local p = TT.db and TT.Profile()
+  local f = p and p.format and TT.FORMATS[p.format] or TT.FORMATS.collection
+  return f[name]
+end
+
+---------------------------------------------------------------------------
 -- Dungeon final bosses (npcId -> dungeon). Killing one pays the dungeon
 -- bounty; the first bounty boss each day also banks a free pack. Raid and
 -- world bosses need no table - any ?? "worldboss" unit you fight pays the
