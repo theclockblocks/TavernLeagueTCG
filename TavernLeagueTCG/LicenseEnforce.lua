@@ -27,9 +27,10 @@ local sweeping = false
 local lastCastWarn = {}
 local warnedBags = {}
 
--- the license layer's enforcement gate (spells/talents/bags/gear slots)
+-- the license layer's enforcement gate (spells/talents/bags/gear slots):
+-- always on in license formats - the format IS the lock
 local function licenseOn()
-  return TT.db and TT.Profile().lockedMode and TT.LicenseLayerActive()
+  return TT.db ~= nil and TT.LicenseLayerActive()
 end
 
 ---------------------------------------------------------------------------
@@ -155,13 +156,12 @@ local function UpdateGearOverlays()
 end
 
 -- Why must this inventory slot be emptied? nil = it's fine.
---   "license" - the slot's license isn't owned (Challenge/League)
---   "card"    - the item's card isn't owned (Collection/League)
--- Grandfathered items are exempt from BOTH layers (spec: what you wore
--- when the lock first saw you stays yours).
+--   "license" - the slot's license isn't owned (Challenge/League;
+--               always enforced, no grandfathering - DeckLocked rules)
+--   "card"    - TCG Locked mode is on and the item's card isn't owned
+--               (grandfathered items are exempt, via IsItemViolation)
 function TT.EquipViolationReason(slotId, itemId)
-  if not itemId or not (TT.db and TT.Profile().lockedMode) then return nil end
-  if TT.cdb.grandfathered[itemId] then return nil end
+  if not itemId or not TT.db then return nil end
   if TT.LicenseLayerActive() then
     if not gearCards then BuildGearCards() end
     local slotKey = slotIdToKey[slotId]
@@ -178,7 +178,7 @@ local ContainerIDToInventoryIDCompat =
 
 function TT.SweepLockedGear()
   if sweeping then return end
-  if not (TT.db and TT.Profile().lockedMode) then return end
+  if not TT.db then return end
   if not TT.LicenseLayerActive() and not TT.ItemLayerActive() then return end
   if InCombatLockdown() then
     pendingSweep = true

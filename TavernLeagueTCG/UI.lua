@@ -975,8 +975,8 @@ local function EnterDrawStage()
       c:Hide()
     end
   end
-  -- with the lock on, a dealt pack must be resolved (DeckLocked rule)
-  ui.drawPutBack:SetShown(not TT.Profile().lockedMode)
+  -- a dealt pack must always be resolved (license formats are enforced)
+  ui.drawPutBack:Hide()
 end
 
 -- League: five cards face-down, flip in any order, keep exactly one.

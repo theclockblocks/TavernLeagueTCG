@@ -82,13 +82,10 @@ function TT.CheckBonusDungeons()
   end
 end
 
--- auto = a detected boss kill (or a derived bonus row) - the only path
--- allowed while the lock is on
+-- auto = a detected boss kill (or a derived bonus row). Manual marking
+-- is honor-system bookkeeping (the tracker pays nothing), so it's always
+-- allowed - the UI confirms every manual click.
 function TT.CompleteDungeon(name, auto)
-  if TT.Profile().lockedMode and not auto then
-    TT.Warn("The lock is on - dungeons complete when the final boss dies.")
-    return
-  end
   local run = TT.Run()
   if run.dungeons[name] then return end
   run.dungeons[name] = true
@@ -98,12 +95,7 @@ function TT.CompleteDungeon(name, auto)
   TT.Refresh()
 end
 
--- Shift-click un-complete (manual-mode QoL only)
 function TT.UncompleteDungeon(name)
-  if TT.Profile().lockedMode then
-    TT.Warn("The lock is on - dungeon completion can't be undone.")
-    return
-  end
   local run = TT.Run()
   if run.dungeons[name] then
     run.dungeons[name] = nil

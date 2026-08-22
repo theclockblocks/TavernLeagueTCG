@@ -179,11 +179,6 @@ function TT.SetFormat(fmt)
   TT.LogEvent("event", ("%s chose the %s format for %s."):format(
     UnitName("player") or "?", TT.FORMATS[fmt].label, TT.ProfileLabel()))
   TT.Msg(("Format locked in: |cffffd100%s|r."):format(TT.FORMATS[fmt].label))
-  -- license formats ARE the lock: enforcement turns on with the pick
-  -- (Collection keeps its opt-in Locked mode)
-  if TT.FORMATS[fmt].licenses then
-    TT.EnableLockedMode()
-  end
   -- the catch-up grants and goal scans waited for the format decision
   TT.GrantRetroPacks()
   if TT.GrantRetroLicenses then TT.GrantRetroLicenses() end
@@ -979,12 +974,8 @@ function TT.EnableLockedMode()
   if p.lockedMode then return end
   p.lockedMode = true
   p.lockedModeAt = time()
-  TT.LogEvent("event", "The lock is ENABLED for " .. TT.ProfileLabel() .. ".")
-  if TT.FormatFlag("licenses") then
-    TT.Msg("|cffff4444The lock is ON.|r Gear slots and abilities now require their license cards.")
-  else
-    TT.Msg("|cffff4444TCG Locked mode is ON.|r Equipping gear now requires owning its card.")
-  end
+  TT.LogEvent("event", "TCG Locked mode ENABLED for " .. TT.ProfileLabel() .. ".")
+  TT.Msg("|cffff4444TCG Locked mode is ON.|r Equipping gear now requires owning its card.")
   if TT.Enforce_OnLockEnabled then TT.Enforce_OnLockEnabled() end
   TT.Refresh()
 end
@@ -1171,11 +1162,6 @@ function TT.SetupForPlayer()
   TT.GrantRetroPacks()
   if TT.GrantRetroLicenses then TT.GrantRetroLicenses() end
   if TT.LicenseLayerActive and TT.LicenseLayerActive() then
-    -- license formats are always under the lock; profiles that picked one
-    -- before this rule existed (or via older dev builds) catch up here
-    if not TT.Profile().lockedMode then
-      TT.EnableLockedMode()
-    end
     if TT.MaybeOfferDeckLockedImport then TT.MaybeOfferDeckLockedImport() end
     local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
     if isLoaded and isLoaded("DeckLocked") then

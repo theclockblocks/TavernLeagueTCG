@@ -367,10 +367,6 @@ local function BuildGoalsPanel(panel)
       -- manual marking always confirms - one stray click must never
       -- complete a dungeon (kills auto-complete these with no dialog)
       local row = CreateTextRow(panel, 180, function()
-        if TT.Profile().lockedMode then
-          TT.Warn("The lock is on - dungeons complete when the final boss dies.")
-          return
-        end
         if TT.DUNGEON_BONUS[name] then
           TT.Msg("That row completes on its own when its dungeons are done.")
           return

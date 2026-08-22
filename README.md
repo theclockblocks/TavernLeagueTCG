@@ -30,9 +30,10 @@ Every run now picks a format when it begins - permanently:
   license cards and level-appropriate gear side by side, keep exactly
   **one**. "Battle Stance, or that blue sword?" The full credit economy
   runs alongside, but licenses only ever come from your draft picks.
-  Slots and abilities lock hard; once a slot's license is earned, any
-  item is free to wear in it - the binder is your collection, not a
-  second permission gate.
+  Gear slots, abilities, talents and bags lock hard from the start -
+  and once a slot's license is earned, any item is free to wear in it.
+  Want more? Opt into **TCG Locked mode** on top and equipping also
+  requires owning the item's card from the binder.
 
 Auto-detected **tavern goals** (profession milestones, exalted rep,
 1,000 honorable kills, epic weapons, boss hunts, TBC heroics) pay a

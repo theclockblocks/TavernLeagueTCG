@@ -36,12 +36,12 @@ local INV_SLOT_BUTTONS = {
   [18] = "CharacterRangedSlot", [19] = "CharacterTabardSlot",
 }
 
--- the item-card layer runs only in formats that enforce it (Collection;
--- League gear is free once its slot license is earned)
+-- the item-card layer = TCG Locked mode: profile.lockedMode in a format
+-- that allows it (Collection or League; TT.ItemLayerActive checks both)
 local function lockedOn()
-  if not (TT.db and TT.Profile().lockedMode) then return false end
+  if not TT.db then return false end
   if TT.ItemLayerActive then return TT.ItemLayerActive() end
-  return true
+  return TT.Profile().lockedMode
 end
 
 -- An item is a violation if it has a card in the pool, the run does not own

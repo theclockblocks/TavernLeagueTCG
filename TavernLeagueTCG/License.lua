@@ -18,12 +18,16 @@ function TT.IsUnlocked(key)
   return TT.Run().unlocked[key] == true
 end
 
+-- The license layer IS the format: always enforced in Challenge/League.
 function TT.LicenseLayerActive()
   return TT.FormatFlag("licenses") == true
 end
 
+-- The item-card layer is TCG Locked mode ([LOCKED]): an opt-in that
+-- stacks binder-card requirements on top, in formats that allow it.
 function TT.ItemLayerActive()
   return TT.FormatFlag("itemEnforce") == true
+    and TT.db ~= nil and TT.Profile().lockedMode == true
 end
 
 -- Talent points this character has EARNED (box "talent-i" is worth the
@@ -50,20 +54,10 @@ function TT.LicenseMaxTalentPoints()
   return total
 end
 
--- Manual sandbox toggle for the board's boxes, DeckLocked-style: only
--- while the lock is off; with the lock on, unlocks come from Class Packs.
+-- The board's boxes are read-only: license formats are always enforced,
+-- so unlocks only ever come from Class Packs and draft picks.
 function TT.ToggleLicenseBox(key)
-  if TT.Profile().lockedMode then
-    TT.Warn("The lock is on - unlocks come from your Class Packs.")
-    return
-  end
-  local run = TT.Run()
-  if run.unlocked[key] then
-    run.unlocked[key] = nil
-  else
-    run.unlocked[key] = true
-  end
-  TT.Refresh()
+  TT.Warn("Unlocks come from your Class Packs - open one!")
 end
 
 ---------------------------------------------------------------------------
@@ -229,12 +223,9 @@ end
 function TT.UndoLicenseChoice()
   local run = TT.Run()
   if run.pendingDraw then
-    if TT.Profile().lockedMode then
-      TT.Warn("The lock is on - you must choose one of the drawn cards.")
-      return
-    end
-    run.pendingDraw = nil
-    TT.Refresh()
+    -- a dealt Class Pack must be resolved (DeckLocked's enforce rule;
+    -- license formats are always enforced)
+    TT.Warn("A dealt Class Pack must be resolved - choose a card!")
     return
   end
   local undo = run.lastUndo

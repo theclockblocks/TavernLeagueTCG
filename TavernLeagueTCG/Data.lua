@@ -74,11 +74,12 @@ TT.FORMATS = {
                  credits = false, licenses = true,  drafts = false, itemEnforce = false },
   collection = { label = "Collection", packs = true,  binder = true,  trade = true,
                  credits = true,  licenses = false, drafts = false, itemEnforce = true },
-  -- League enforces the LICENSE layer only: once a slot's license is
-  -- earned, any item is free to wear in it - item cards are collection,
-  -- not permission, in this format
+  -- The license layer (licenses=true) is ALWAYS enforced in its formats.
+  -- itemEnforce is a CAPABILITY: it activates only when the run opts into
+  -- TCG Locked mode ([LOCKED]), stacking card-ownership requirements from
+  -- the binder on top - available in Collection and League, never Challenge.
   league     = { label = "League",     packs = true,  binder = true,  trade = true,
-                 credits = true,  licenses = true,  drafts = true,  itemEnforce = false },
+                 credits = true,  licenses = true,  drafts = true,  itemEnforce = true },
 }
 
 -- Capability lookup for the active run. Profiles from before formats
