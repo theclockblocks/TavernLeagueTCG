@@ -357,7 +357,10 @@ function buildPool() {
     }
 
     const tier = edits.tier.get(id) || QUALITY_TIER[item.quality] || 1;
-    rows.push({ i: id, r: tier, x: isTbcOnly ? 1 : 0, n: item.name });
+    // rl/il ride along so the addon can filter by level synchronously
+    // (GetItemInfo is async; draft packs and drop steering can't wait)
+    rows.push({ i: id, r: tier, x: isTbcOnly ? 1 : 0, n: item.name,
+      rl: item.requiredLevel || 0, il: item.itemLevel || 0 });
     included.push(`${id},${csvName(item.name)},${item.class},${item.quality},${tier},${isTbcOnly ? 1 : 0}`);
   }
 
@@ -417,13 +420,17 @@ function buildPool() {
   lines.push(`-- ${rows.length} cards (${creatureCount} creatures, ${tbcCount} TBC-gated).`);
   lines.push('-- i = itemId/npcId, r = rarity tier 1-5, n = name (bundled),');
   lines.push('-- kind="npc" + s=set (questnpc/mob/rare/boss) marks creature cards,');
-  lines.push('-- x = 1 marks TBC-only entries (skipped on Classic Era clients).');
+  lines.push('-- x = 1 marks TBC-only entries (skipped on Classic Era clients),');
+  lines.push('-- rl/il = required level / item level (items; omitted when 0).');
   lines.push('');
   lines.push('local ADDON, TT = ...');
   lines.push('');
   lines.push('TT.pool = {');
   for (const r of rows) {
-    const extra = (r.kind === 'npc' ? `,kind="npc",s="${r.s}"` : '') + (r.x ? ',x=1' : '');
+    const extra = (r.kind === 'npc'
+      ? `,kind="npc",s="${r.s}"`
+      : `${r.rl ? `,rl=${r.rl}` : ''}${r.il ? `,il=${r.il}` : ''}`)
+      + (r.x ? ',x=1' : '');
     lines.push(`{i=${r.i},r=${r.r},n=${luaName(r.n)}${extra}},`);
   }
   lines.push('}');
