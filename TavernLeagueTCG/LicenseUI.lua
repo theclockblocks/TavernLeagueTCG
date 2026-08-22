@@ -134,7 +134,6 @@ local function BuildGearPanel(board)
     local card = bySlot[slot]
     if not card then return end
     local b = CreateIconBox(panel, 40, card.name)
-    b.tooltipSub = "Card appears in your Class Packs at level " .. card.minLevel .. "."
     b:SetPoint("TOPLEFT", x, y)
     b.icon:SetTexture(TT.GetLicenseIcon(card))
     b:SetScript("OnClick", function() TT.ToggleLicenseBox(slot) end)
@@ -251,7 +250,6 @@ local function BuildRightPanel(board)
     local col = (i - 1) % PER_ROW
     local row = math.floor((i - 1) / PER_ROW)
     local b = CreateIconBox(panel, 38, card.name)
-    b.tooltipSub = "Card appears in your Class Packs at level " .. card.minLevel .. "."
     b:SetPoint("TOPLEFT", 12 + col * 44, -24 - row * 44)
     b.icon:SetTexture(card.icon)
     local index = i
@@ -370,12 +368,22 @@ local function BuildGoalsPanel(panel)
   ui.dungeonRows = {}
   local function addColumn(list, x)
     for i, name in ipairs(list) do
+      -- manual marking always confirms - one stray click must never
+      -- complete a dungeon (kills auto-complete these with no dialog)
       local row = CreateTextRow(panel, 180, function()
-        if IsShiftKeyDown() then
-          TT.UncompleteDungeon(name)
-        else
-          TT.CompleteDungeon(name)
+        if TT.Profile().lockedMode then
+          TT.Warn("The lock is on - dungeons complete when the final boss dies.")
+          return
         end
+        if TT.DUNGEON_BONUS[name] then
+          TT.Msg("That row completes on its own when its dungeons are done.")
+          return
+        end
+        local done = TT.Run().dungeons[name]
+        TT._dungeonPending = { name = name, un = done and true or false }
+        StaticPopup_Show("TAVERNLEAGUETCG_DUNGEON", done
+          and ("Un-mark |cffffd100" .. name .. "|r as complete?")
+          or ("Mark |cffffd100" .. name .. "|r as complete?"))
       end)
       row:SetPoint("TOPLEFT", x, -(16 + (i - 1) * 14))
       row.dungeon = name
@@ -386,6 +394,27 @@ local function BuildGoalsPanel(panel)
   addColumn(TT.DUNGEONS_ERA, 380)
   if TT.IS_TBC then addColumn(TT.DUNGEONS_TBC, 580) end
 end
+
+StaticPopupDialogs.TAVERNLEAGUETCG_DUNGEON = {
+  text = "%s",
+  button1 = YES,
+  button2 = NO,
+  OnAccept = function()
+    local p = TT._dungeonPending
+    TT._dungeonPending = nil
+    if not p then return end
+    if p.un then
+      TT.UncompleteDungeon(p.name)
+    else
+      TT.CompleteDungeon(p.name)
+    end
+  end,
+  OnCancel = function() TT._dungeonPending = nil end,
+  timeout = 0,
+  whileDead = true,
+  hideOnEscape = true,
+  preferredIndex = 3,
+}
 
 local function RefreshGoalsPanel()
   local run = TT.Run()
@@ -404,7 +433,7 @@ local function RefreshGoalsPanel()
   for _, row in ipairs(ui.dungeonRows or {}) do
     local done = run.dungeons[row.dungeon]
     local heroic = run.dungeonsHeroic[row.dungeon]
-    local mark = done and "|cff20ff20+|r " or "|cff777777-|r "
+    local mark = done and "|cff20ff20[x]|r " or "|cff777777[  ]|r "
     row.text:SetText(mark .. row.dungeon
       .. (heroic and " |cffff8000[H]|r" or "")
       .. (row.derived and " |cff777777*|r" or ""))
