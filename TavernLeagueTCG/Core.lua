@@ -156,17 +156,18 @@ function TT.RunKey()
   return "realm:" .. TT.RealmKey()
 end
 
-local seededRuns = {}   -- session cache: default-fill each run once
-
 function TT.Run()
   local runs = TT.cdb.runs
   local key = TT.RunKey()
-  runs[key] = runs[key] or {}
-  if not seededRuns[key] then
-    applyDefaults(runs[key], runDefaults)
-    seededRuns[key] = true
+  local run = runs[key]
+  -- `drawn` doubles as the seeded sentinel: absent means this run table
+  -- is new (or was just wiped) and needs its defaults filled in
+  if not run or run.drawn == nil then
+    run = run or {}
+    runs[key] = run
+    applyDefaults(run, runDefaults)
   end
-  return runs[key]
+  return run
 end
 
 -- The format is picked once, when a run begins, and is immutable: a
