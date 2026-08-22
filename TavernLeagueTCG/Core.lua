@@ -173,6 +173,9 @@ function TT.SetFormat(fmt)
   TT.LogEvent("event", ("%s chose the %s format for %s."):format(
     UnitName("player") or "?", TT.FORMATS[fmt].label, TT.ProfileLabel()))
   TT.Msg(("Format locked in: |cffffd100%s|r."):format(TT.FORMATS[fmt].label))
+  -- the catch-up grants waited for the format decision
+  TT.GrantRetroPacks()
+  if TT.GrantRetroLicenses then TT.GrantRetroLicenses() end
   TT.Refresh()
   return true
 end
@@ -1088,6 +1091,7 @@ function TT.OnAddonMessage(prefix, msg, channel, sender)
     end
   elseif TRADE_VERBS[verb] then
     if channel ~= "WHISPER" then return end
+    if not TT.FormatFlag("trade") then return end   -- format has no trading
     if TT.Trade_OnMessage then
       TT.Trade_OnMessage(verb, payload, sender, shortSender, version)
     end
@@ -1139,9 +1143,11 @@ end
 -- and the grant is logged for the run's audit trail.
 function TT.GrantRetroPacks()
   if TT.cdb.retroPacks then return end
-  -- only consume the once-ever flag where packs exist: a character whose
-  -- first run is Challenge still gets this grant on a pack format later
-  if not TT.FormatFlag("packs") then return end
+  -- only consume the once-ever flag once a format WITH packs is locked
+  -- in: a character whose first run is Challenge (or who hasn't picked
+  -- yet) still gets this grant on a pack format later
+  local p = TT.Profile()
+  if not p.format or not TT.FORMATS[p.format].packs then return end
   TT.cdb.retroPacks = true
   local level = UnitLevel("player") or 1
   local grant = math.max(0, level - 1)

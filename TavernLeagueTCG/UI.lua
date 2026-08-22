@@ -295,16 +295,56 @@ function TT.ToggleFrame()
   end
 end
 
+---------------------------------------------------------------------------
+-- Tabs. The registry drives the toolbar, page visibility and per-format
+-- gating; a tab with a `flag` only exists in formats that grant it. New
+-- out-of-file tabs follow the Trade pattern: UI creates the page frame
+-- and calls the builder defensively (see UI_Init).
+---------------------------------------------------------------------------
+
+local TABS = {
+  { key = "packs",  label = "Packs",  flag = "packs" },
+  { key = "binder", label = "Binder", flag = "binder" },
+  { key = "tavern", label = "Tavern" },
+  { key = "locked", label = "Locked" },
+  { key = "trade",  label = "Trade",  flag = "trade" },
+}
+
+local function TabVisible(tab)
+  return not tab.flag or TT.FormatFlag(tab.flag) == true
+end
+
+-- right-align the visible tabs; hidden formats leave no gaps
+local function LayoutToolbar()
+  local x = 0
+  for i = #TABS, 1, -1 do
+    local tab = TABS[i]
+    local btn = ui.tabs[tab.key]
+    local vis = TabVisible(tab)
+    btn:SetShown(vis)
+    if vis then
+      btn:ClearAllPoints()
+      btn:SetPoint("RIGHT", -x, 0)
+      x = x + 74
+    end
+  end
+end
+
 function TT.ShowTab(which)
+  for _, tab in ipairs(TABS) do
+    if tab.key == which and not TabVisible(tab) then which = nil end
+  end
+  if not which then
+    for _, tab in ipairs(TABS) do
+      if TabVisible(tab) then which = tab.key break end
+    end
+  end
   ui.activeTab = which
-  ui.packsPage:SetShown(which == "packs")
-  ui.binderPage:SetShown(which == "binder")
-  ui.lockedPage:SetShown(which == "locked")
-  ui.tradePage:SetShown(which == "trade")
-  ui.packsTab:SetEnabled(which ~= "packs")
-  ui.binderTab:SetEnabled(which ~= "binder")
-  ui.lockedTab:SetEnabled(which ~= "locked")
-  ui.tradeTab:SetEnabled(which ~= "trade")
+  for _, tab in ipairs(TABS) do
+    ui.pages[tab.key]:SetShown(tab.key == which)
+    ui.tabs[tab.key]:SetEnabled(tab.key ~= which)
+  end
+  LayoutToolbar()
   TT.Refresh()
 end
 
@@ -322,14 +362,13 @@ local function BuildToolbar()
   ui.profileText:SetPoint("LEFT", ui.creditsText, "RIGHT", 16, 0)
   ui.profileText:SetTextColor(0.7, 0.7, 0.7)
 
-  ui.packsTab = CreateActionButton(bar, 78, 20, "Packs", function() TT.ShowTab("packs") end)
-  ui.packsTab:SetPoint("RIGHT", -246, 0)
-  ui.binderTab = CreateActionButton(bar, 78, 20, "Binder", function() TT.ShowTab("binder") end)
-  ui.binderTab:SetPoint("RIGHT", -164, 0)
-  ui.lockedTab = CreateActionButton(bar, 78, 20, "Locked", function() TT.ShowTab("locked") end)
-  ui.lockedTab:SetPoint("RIGHT", -82, 0)
-  ui.tradeTab = CreateActionButton(bar, 78, 20, "Trade", function() TT.ShowTab("trade") end)
-  ui.tradeTab:SetPoint("RIGHT", 0, 0)
+  ui.tabs = {}
+  for _, tab in ipairs(TABS) do
+    local key = tab.key
+    ui.tabs[key] = CreateActionButton(bar, 70, 20, tab.label,
+      function() TT.ShowTab(key) end)
+  end
+  LayoutToolbar()
 end
 
 ---------------------------------------------------------------------------
@@ -1335,12 +1374,129 @@ end
 -- Refresh
 ---------------------------------------------------------------------------
 
+-- The format choice is the first screen of any fresh run: a modal over
+-- the whole window until TT.SetFormat locks one in. Existing profiles
+-- migrated to Collection and never see it.
+local FORMAT_PICKS = {
+  { key = "challenge", title = "Challenge",
+    body = "The permission game. Draw license cards as you level - every "
+      .. "ability, gear slot, talent point, profession and bag must be "
+      .. "earned one card at a time.\n\nNo credits, no packs, no binder. "
+      .. "Progress is this character's alone." },
+  { key = "collection", title = "Collection",
+    body = "The trading card game. Earn credits by playing, rip packs, "
+      .. "fill the realm binder, trade with friends.\n\nWith the lock on, "
+      .. "only gear whose card the run owns may be worn - now enforced "
+      .. "for real." },
+  { key = "league", title = "League",
+    body = "Both games fused. Every level deals a DRAFT PACK: licenses "
+      .. "and gear side by side, and you keep exactly ONE card.\n\nThe "
+      .. "full credit economy runs alongside; licenses only ever come "
+      .. "from your draft picks." },
+}
+
+local function BuildFormatPicker()
+  local picker = CreateFrame("Frame", nil, frame, "BackdropTemplate")
+  picker:SetPoint("TOPLEFT", 4, -26)
+  picker:SetPoint("BOTTOMRIGHT", -4, 4)
+  picker:SetBackdrop(PANEL_BACKDROP)
+  picker:SetBackdropColor(0.02, 0.02, 0.04, 0.98)
+  picker:SetBackdropBorderColor(GOLD.r, GOLD.g, GOLD.b)
+  picker:SetFrameLevel(frame:GetFrameLevel() + 30)
+  picker:EnableMouse(true)
+  picker:Hide()
+  ui.formatPicker = picker
+
+  local title = CreateHeader(picker, "Choose this run's format")
+  title:SetPoint("TOP", 0, -20)
+  local sub = picker:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+  sub:SetPoint("TOP", 0, -42)
+  sub:SetTextColor(0.65, 0.65, 0.65)
+  sub:SetText("Permanent for this run. A Hardmode character can always start a fresh run with a different format.")
+
+  local chosen
+  local panels = {}
+  local W, H, GAP = 240, 330, 16
+  for i, pick in ipairs(FORMAT_PICKS) do
+    local pnl = CreateFrame("Button", nil, picker, "BackdropTemplate")
+    pnl:SetSize(W, H)
+    pnl:SetPoint("TOPLEFT", picker, "TOP",
+      (i - 2) * (W + GAP) - W / 2, -70)
+    pnl:SetBackdrop(PANEL_BACKDROP)
+    pnl:SetBackdropColor(0.06, 0.06, 0.09, 1)
+    pnl:SetBackdropBorderColor(0.35, 0.32, 0.45)
+
+    local head = pnl:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    head:SetPoint("TOP", 0, -18)
+    head:SetText(pick.title)
+    head:SetTextColor(GOLD.r, GOLD.g, GOLD.b)
+
+    local body = pnl:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
+    body:SetPoint("TOPLEFT", 14, -48)
+    body:SetPoint("BOTTOMRIGHT", -14, 14)
+    body:SetJustifyH("LEFT")
+    body:SetJustifyV("TOP")
+    body:SetTextColor(0.8, 0.8, 0.8)
+    body:SetText(pick.body)
+
+    pnl:SetScript("OnClick", function()
+      chosen = pick.key
+      for j, other in ipairs(panels) do
+        if other == pnl then
+          other:SetBackdropBorderColor(GOLD.r, GOLD.g, GOLD.b)
+        else
+          other:SetBackdropBorderColor(0.35, 0.32, 0.45)
+        end
+      end
+      ui.formatBeginBtn:SetEnabled(true)
+      ui.formatBeginBtn:SetText("Begin your " .. pick.title .. " run")
+    end)
+    panels[i] = pnl
+  end
+
+  ui.formatBeginBtn = CreateActionButton(picker, 260, 32, "Pick a format above",
+    function()
+      if chosen and TT.SetFormat(chosen) then
+        picker:Hide()
+        TT.ShowTab(nil)
+      end
+    end)
+  ui.formatBeginBtn:SetPoint("BOTTOM", 0, 22)
+  ui.formatBeginBtn:SetEnabled(false)
+end
+
+local function UpdateFormatPicker()
+  if ui.formatPicker then
+    ui.formatPicker:SetShown(TT.Profile().format == nil)
+  end
+end
+
 function TT.UI_Refresh()
   if not frame or not frame:IsShown() then return end
   local p = TT.Profile()
 
-  ui.creditsText:SetText(TT.FormatNumber(p.credits) .. "c")
-  ui.profileText:SetText(TT.ProfileLabel() .. (p.lockedMode and "  |cffff4444[LOCKED]|r" or ""))
+  local fmt = p.format and TT.FORMATS[p.format]
+  if TT.FormatFlag("credits") then
+    ui.creditsText:SetText(TT.FormatNumber(p.credits) .. "c")
+  else
+    ui.creditsText:SetText(fmt and fmt.label or "")
+  end
+  ui.profileText:SetText(TT.ProfileLabel()
+    .. (fmt and TT.FormatFlag("credits") and ("  [" .. fmt.label .. "]") or "")
+    .. (p.lockedMode and "  |cffff4444[LOCKED]|r" or ""))
+
+  UpdateFormatPicker()
+  -- a format flip (picker, dev command, hardmode toggle) can strand the
+  -- active tab on a page this format doesn't have
+  local activeOk = false
+  for _, tab in ipairs(TABS) do
+    if tab.key == ui.activeTab and TabVisible(tab) then activeOk = true end
+  end
+  if not activeOk then
+    TT.ShowTab(nil)   -- re-enters UI_Refresh once, lands on a visible tab
+    return
+  end
+  LayoutToolbar()
 
   ui.bigCredits:SetText(TT.FormatNumber(p.credits))
   ui.statsLine:SetText(("Free packs: %d   Packs opened: %d   God packs: %d   Pity: %d/%d"):format(
@@ -1363,6 +1519,7 @@ function TT.UI_Refresh()
   RefreshBinder()
   RefreshLocked()
   if ui.tradePage:IsShown() and TT.Trade_Refresh then TT.Trade_Refresh() end
+  if ui.tavernPage:IsShown() and TT.License_Refresh then TT.License_Refresh() end
 end
 
 -- An item's data arrived from the server. Card names ship with the pool,
@@ -1481,32 +1638,28 @@ function TT.UI_Init()
 
   BuildToolbar()
 
-  ui.packsPage = CreateFrame("Frame", nil, frame)
-  ui.packsPage:SetPoint("TOPLEFT", 8, -66)
-  ui.packsPage:SetPoint("BOTTOMRIGHT", -8, 8)
-
-  ui.binderPage = CreateFrame("Frame", nil, frame)
-  ui.binderPage:SetPoint("TOPLEFT", 8, -66)
-  ui.binderPage:SetPoint("BOTTOMRIGHT", -8, 8)
-  ui.binderPage:Hide()
-
-  ui.lockedPage = CreateFrame("Frame", nil, frame)
-  ui.lockedPage:SetPoint("TOPLEFT", 8, -66)
-  ui.lockedPage:SetPoint("BOTTOMRIGHT", -8, 8)
-  ui.lockedPage:Hide()
-
-  ui.tradePage = CreateFrame("Frame", nil, frame)
-  ui.tradePage:SetPoint("TOPLEFT", 8, -66)
-  ui.tradePage:SetPoint("BOTTOMRIGHT", -8, 8)
-  ui.tradePage:Hide()
+  ui.pages = {}
+  for _, tab in ipairs(TABS) do
+    local page = CreateFrame("Frame", nil, frame)
+    page:SetPoint("TOPLEFT", 8, -66)
+    page:SetPoint("BOTTOMRIGHT", -8, 8)
+    page:Hide()
+    ui.pages[tab.key] = page
+  end
+  -- legacy aliases: the page builders and refreshers below use these
+  ui.packsPage, ui.binderPage, ui.lockedPage, ui.tradePage, ui.tavernPage =
+    ui.pages.packs, ui.pages.binder, ui.pages.locked, ui.pages.trade,
+    ui.pages.tavern
 
   BuildPacksPage(ui.packsPage)
   BuildBinderPage(ui.binderPage)
   BuildLockedPage(ui.lockedPage)
   if TT.Trade_BuildUI then TT.Trade_BuildUI(ui.tradePage) end
+  if TT.License_BuildUI then TT.License_BuildUI(ui.tavernPage) end
   BuildPackOverlay()
+  BuildFormatPicker()
 
-  TT.ShowTab("packs")
+  TT.ShowTab(nil)   -- first visible tab for this run's format
   CreateMinimapButton()
 
   -- a pack was mid-open when the player logged out: resume it
