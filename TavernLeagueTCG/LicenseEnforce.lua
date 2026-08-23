@@ -22,6 +22,9 @@ local ADDON, TT = ...
 
 local LOCK_TEXTURE = "Interface\\LFGFrame\\UI-LFG-ICON-LOCK"
 local overlays = { gear = {}, bags = {}, book = {}, bars = {} }
+-- bars is keyed by the button frame, not a name: a bar addon that discards
+-- and rebuilds its buttons should not pin the old ones here forever
+setmetatable(overlays.bars, { __mode = "k" })
 local pendingSweep = false
 local sweeping = false
 local lastCastWarn = {}
@@ -590,8 +593,32 @@ local BAR_PREFIXES = {
   "MultiBar5Button", "MultiBar6Button", "MultiBar7Button",
 }
 
+-- Which action slot is this button driving? Every bar addon answers
+-- differently, so try each in turn and give up quietly rather than guess:
+-- a button we cannot read simply goes unlocked, as it did before.
+local function ButtonActionSlot(button)
+  if button.GetPagedID then                       -- Blizzard
+    local ok, id = pcall(button.GetPagedID, button)
+    if ok and type(id) == "number" then return id end
+  end
+  if type(button.action) == "number" then return button.action end
+  -- LibActionButton parks the slot in _state_action, but only when the
+  -- button is actually driving one - for a spell button that field is a
+  -- spell id instead, which the caller handles
+  if button._state_type == "action" and type(button._state_action) == "number" then
+    return button._state_action
+  end
+  local attr = button.GetAttribute and button:GetAttribute("action")
+  if type(attr) == "number" then return attr end
+  return nil
+end
+
 local function ButtonSpellName(button)
-  local action = (button.GetPagedID and button:GetPagedID()) or button.action
+  -- a LibActionButton can hold a spell outright rather than an action slot
+  if button._state_type == "spell" and type(button._state_action) == "number" then
+    return (GetSpellInfo(button._state_action))
+  end
+  local action = ButtonActionSlot(button)
   if not action then return nil end
   local kind, id = GetActionInfo(action)
   if kind == "spell" and id then
@@ -604,40 +631,64 @@ local function ButtonSpellName(button)
   return nil
 end
 
+-- Bars that are not Blizzard's. LibActionButton-1.0 hands over every
+-- button it owns, which covers Bartender4, Dominos, ElvUI and anything
+-- else built on it in one pass. Forks embed under their own major name
+-- (ElvUI ships "LibActionButton-1.0-ElvUI"), so match on the prefix and
+-- take whichever ones answer.
+local function ForEachLibButton(fn)
+  if not (LibStub and LibStub.libs) then return end
+  for major, lib in pairs(LibStub.libs) do
+    if type(major) == "string" and major:find("^LibActionButton%-1%.0")
+        and type(lib) == "table" and lib.GetAllButtons then
+      local ok, buttons = pcall(lib.GetAllButtons, lib)
+      if ok and type(buttons) == "table" then
+        for k, v in pairs(buttons) do
+          -- the set is keyed by button, but tolerate a plain list too
+          local button = (type(k) == "table" and k) or (type(v) == "table" and v)
+          if button then fn(button) end
+        end
+      end
+    end
+  end
+end
+
 -- An overlay is a plain Frame child of the button: it inherits the
 -- button's position AND its visibility, so a bar the client never lays
 -- out (or hides outright) can never strand a lock on the screen. A
 -- non-secure child neither taints the button nor needs a combat guard.
+local function ApplyBarOverlay(button)
+  if type(button) ~= "table" or not button.GetFrameLevel then return end
+  local ov = overlays.bars[button]
+  if not ov then
+    if not button.CreateTexture then return end
+    ov = CreateFrame("Frame", nil, button)
+    ov:SetAllPoints(button)
+    ov:SetFrameLevel(button:GetFrameLevel() + 5)
+    ov.tint = ov:CreateTexture(nil, "OVERLAY")
+    ov.tint:SetAllPoints()
+    ov.tint:SetColorTexture(0.8, 0, 0, 0.45)
+    ov.lock = ov:CreateTexture(nil, "OVERLAY", nil, 1)
+    ov.lock:SetPoint("TOPRIGHT", -1, -1)
+    ov.lock:SetSize(12, 12)
+    ov.lock:SetTexture(LOCK_TEXTURE)
+    ov.lock:SetTexCoord(0, 0.71875, 0, 0.734375)
+    ov:Hide()
+    overlays.bars[button] = ov
+  end
+  -- IsVisible, not IsShown: a button on a hidden bar still reports itself
+  -- shown, and those phantom bars are the ones that sit in odd corners
+  local name = button:IsVisible() and ButtonSpellName(button) or nil
+  ov:SetShown(licenseOn() and name ~= nil and IsNameLocked(name))
+end
+
 local function UpdateActionBarOverlays()
   for _, prefix in ipairs(BAR_PREFIXES) do
     for i = 1, 12 do
-      local button = _G[prefix .. i]
-      if button then
-        local key = prefix .. i
-        local ov = overlays.bars[key]
-        if not ov then
-          ov = CreateFrame("Frame", nil, button)
-          ov:SetAllPoints(button)
-          ov:SetFrameLevel(button:GetFrameLevel() + 5)
-          ov.tint = ov:CreateTexture(nil, "OVERLAY")
-          ov.tint:SetAllPoints()
-          ov.tint:SetColorTexture(0.8, 0, 0, 0.45)
-          ov.lock = ov:CreateTexture(nil, "OVERLAY", nil, 1)
-          ov.lock:SetPoint("TOPRIGHT", -1, -1)
-          ov.lock:SetSize(12, 12)
-          ov.lock:SetTexture(LOCK_TEXTURE)
-          ov.lock:SetTexCoord(0, 0.71875, 0, 0.734375)
-          ov:Hide()
-          overlays.bars[key] = ov
-        end
-        -- IsVisible, not IsShown: a button on a hidden bar still reports
-        -- itself shown, and those phantom bars are the ones that sit in
-        -- odd corners of the screen
-        local name = button:IsVisible() and ButtonSpellName(button) or nil
-        ov:SetShown(licenseOn() and name ~= nil and IsNameLocked(name))
-      end
+      ApplyBarOverlay(_G[prefix .. i])
     end
   end
+  ForEachLibButton(ApplyBarOverlay)
 end
 
 ---------------------------------------------------------------------------
