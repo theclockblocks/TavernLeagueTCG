@@ -653,11 +653,43 @@ local function ForEachLibButton(fn)
   end
 end
 
+-- ConsolePort's bar is round, so a square tint sits on it badly. The
+-- portrait alpha mask is a plain white disc, so drawing it directly and
+-- tinting it gives a circle without depending on SetMask being there.
+local CIRCLE_TEXTURE = "Interface\\CharacterFrame\\TempPortraitAlphaMask"
+
+local blizzButtons = nil
+
+local function IsBlizzardButton(button)
+  if not blizzButtons then
+    blizzButtons = {}
+    for _, prefix in ipairs(BAR_PREFIXES) do
+      for i = 1, 12 do blizzButtons[prefix .. i] = true end
+    end
+  end
+  local name = button.GetName and button:GetName()
+  return name ~= nil and blizzButtons[name] == true
+end
+
+local function StyleBarOverlay(ov, round)
+  if ov.round == round then return end
+  ov.round = round
+  ov.lock:ClearAllPoints()
+  if round then
+    ov.tint:SetTexture(CIRCLE_TEXTURE)
+    ov.tint:SetVertexColor(0.8, 0, 0, 0.55)
+    ov.lock:SetPoint("CENTER")
+  else
+    ov.tint:SetColorTexture(0.8, 0, 0, 0.45)
+    ov.lock:SetPoint("TOPRIGHT", -1, -1)
+  end
+end
+
 -- An overlay is a plain Frame child of the button: it inherits the
 -- button's position AND its visibility, so a bar the client never lays
 -- out (or hides outright) can never strand a lock on the screen. A
 -- non-secure child neither taints the button nor needs a combat guard.
-local function ApplyBarOverlay(button)
+local function ApplyBarOverlay(button, round)
   if type(button) ~= "table" or not button.GetFrameLevel then return end
   local ov = overlays.bars[button]
   if not ov then
@@ -667,28 +699,38 @@ local function ApplyBarOverlay(button)
     ov:SetFrameLevel(button:GetFrameLevel() + 5)
     ov.tint = ov:CreateTexture(nil, "OVERLAY")
     ov.tint:SetAllPoints()
-    ov.tint:SetColorTexture(0.8, 0, 0, 0.45)
     ov.lock = ov:CreateTexture(nil, "OVERLAY", nil, 1)
-    ov.lock:SetPoint("TOPRIGHT", -1, -1)
     ov.lock:SetSize(12, 12)
     ov.lock:SetTexture(LOCK_TEXTURE)
     ov.lock:SetTexCoord(0, 0.71875, 0, 0.734375)
     ov:Hide()
     overlays.bars[button] = ov
   end
+  StyleBarOverlay(ov, round and not IsBlizzardButton(button))
   -- IsVisible, not IsShown: a button on a hidden bar still reports itself
   -- shown, and those phantom bars are the ones that sit in odd corners
   local name = button:IsVisible() and ButtonSpellName(button) or nil
   ov:SetShown(licenseOn() and name ~= nil and IsNameLocked(name))
 end
 
+-- ConsolePort replaces the bar wholesale, so while it is loaded anything
+-- that is not a Blizzard button by name is taken to be one of its round
+-- ones. Blizzard's own buttons stay square either way.
+local function ConsolePortLoaded()
+  local isLoaded = (C_AddOns and C_AddOns.IsAddOnLoaded) or IsAddOnLoaded
+  if not isLoaded then return false end
+  local ok, loaded = pcall(isLoaded, "ConsolePort")
+  return (ok and loaded) and true or false
+end
+
 local function UpdateActionBarOverlays()
+  local round = ConsolePortLoaded()
   for _, prefix in ipairs(BAR_PREFIXES) do
     for i = 1, 12 do
-      ApplyBarOverlay(_G[prefix .. i])
+      ApplyBarOverlay(_G[prefix .. i], round)
     end
   end
-  ForEachLibButton(ApplyBarOverlay)
+  ForEachLibButton(function(button) ApplyBarOverlay(button, round) end)
 end
 
 ---------------------------------------------------------------------------
