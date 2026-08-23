@@ -2,7 +2,7 @@
 ## Title: Tavern League TCG
 ## Notes: A TCG inside WoW Classic - three formats: Collection (packs, binder, trading), Challenge (the DeckLocked permission game) and League (draft packs: keep one card per level).
 ## Author: theclockblocks
-## Version: 0.5.0-dev
+## Version: 0.5.0
 ## SavedVariables: TavernLeagueTCGDB
 ## SavedVariablesPerCharacter: TavernLeagueTCGCharDB
 ## IconTexture: Interface\Icons\INV_Misc_Ticket_Tarot_Stack_01
